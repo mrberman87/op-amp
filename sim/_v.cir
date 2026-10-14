@@ -1,0 +1,12 @@
+v1 var C3=220p R7=6.8k R8=1.2k
+.include var.inc
+.param C3v=220p R7v=6.8k R8v=1.2k
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 16 10 200meg
+print v(out)
+.endc
+.end

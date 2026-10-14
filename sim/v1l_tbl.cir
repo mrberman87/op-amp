@@ -1,0 +1,11 @@
+v1 DC, print table
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+dc VSRC -20u 20u 10u
+set width=140
+print v(inp) v(n_q2g) v(n_q1g) v(n_q2s) v(n_q1s) v(n_tail) v(n_q1d) v(n_x) i(vsrc)
+.endc
+.end

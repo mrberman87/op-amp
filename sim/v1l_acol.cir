@@ -1,0 +1,11 @@
+v1 open-loop AC (correct)
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 8 10 10meg
+print db(v(out)) v(out)
+.endc
+.end

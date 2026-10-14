@@ -1,0 +1,13 @@
+follower step (centered)
+.include vfull.inc
+.param Cc1v=6.8p Cz=22p R6v=950
+RINM INM OUT 0.01
+VSRC INP 0 PULSE(0 0.5 2u 20n 20n 30u 60u)
+RL   OUT 0 10k
+.control
+op
+print v(out)
+tran 5n 12u
+print v(out)
+.endc
+.end

@@ -1,0 +1,13 @@
+probe nodes
+.include v8.inc
+.param R7v=1.5k Rzv=470 Cc1v=8p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(n_q5e) v(n_q5c) v(n_y) v(n_b1) v(n_b2) v(out)
+ac dec 10 10 1gig
+print v(n_x) v(n_q5c) v(n_b1) v(n_b2) v(out)
+.endc
+.end

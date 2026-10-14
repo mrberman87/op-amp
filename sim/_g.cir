@@ -1,0 +1,13 @@
+v1 gain R7=10k R8=2.2k forced ON
+.include var.inc
+.param C3v=220p R7v=10k R8v=2.2k
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.nodeset v(n_q1d)=10 v(n_x)=9.5 v(n_y)=8.9 v(n_q5c)=6 v(n_b1)=-0.6 v(n_b2)=-1.2 v(out)=0.9
+.control
+op
+ac dec 16 10 200meg
+print v(out)
+.endc
+.end

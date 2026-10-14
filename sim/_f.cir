@@ -1,0 +1,11 @@
+v1 follower C3=2.2n
+.include v1fc.inc
+.param C3v=2.2n
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 16 100 100meg
+print v(out)
+.endc
+.end

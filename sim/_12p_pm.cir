@@ -1,0 +1,12 @@
+v1 C3=12p PM
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 10 10 200meg
+let dbv=db(v(out))
+let phv=phase(v(out))
+wrdata _pm_12p.dat dbv phv
+.endc
+.end

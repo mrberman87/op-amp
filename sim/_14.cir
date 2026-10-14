@@ -1,0 +1,13 @@
+VAS cascode
+.include v10x.inc
+.param R7v=1.5k Rzv=0 Cc1v=6p C4v=100n
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(n_q5c) v(n_q5cc) v(n_vc) v(out)
+ac dec 30 10 1gig
+print v(out)
+.endc
+.end

@@ -1,0 +1,11 @@
+.include v1fc.inc
+.param C3v=220p
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x) v(n_y) v(n_q5c) v(n_b1) v(n_b2)
+print v(n_q1s) v(n_q2s) vcc#branch
+.endc
+.end

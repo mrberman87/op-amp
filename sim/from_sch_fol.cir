@@ -1,0 +1,22 @@
+* Unity-gain follower (closed-loop), built from the KiCad-exported schematic netlist.
+.include kicad_export.inc
+
+VCC  +15V 0 DC 15
+VEE  -15V 0 DC -15
+Rgnd GND 0 1u
+RLEAK1 Net-_Q1-G_ 0 100Meg
+RLEAK2 Net-_Q2-G_ 0 100Meg
+RY     Net-_Q11-E_ 0 100k
+
+* unity-gain follower: short OUT back to IN- (0 V source as the feedback wire)
+VSRC /IN+ 0 DC 0 AC 1
+VFB  /OUT /IN- DC 0
+RL   /OUT 0 10k
+
+.control
+op
+ac dec 40 1 1gig
+set filetype=ascii
+wrdata /tmp/from_sch_fol.dat v(/OUT)
+.endc
+.end

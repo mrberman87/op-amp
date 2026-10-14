@@ -1,0 +1,12 @@
+trim t=0.70
+.include v9.inc
+.param R7v=1.5k Rzv=0 Cc1v=5p C4v=100n t=0.70
+Cz n_q1d 0 15p
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x)
+.endc
+.end

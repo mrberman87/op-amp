@@ -1,0 +1,13 @@
+no-cascode + R6byp Cc1=6.8p Cz=15p
+.include v11.inc
+.param R7v=1.5k Rzv=0 Cc1v=6.8p Czv=15p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x)
+ac dec 30 10 1gig
+print v(out)
+.endc
+.end

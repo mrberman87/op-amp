@@ -1,0 +1,12 @@
+follower soft-start
+.include vsoft.inc
+.param R7v=1.5k Rzv=0 Cc1v=5p C4v=100n
+Cz n_q1d 0 15p
+RINM INM OUT 0.01
+VSRC INP 0 PULSE(0 0.5 500u 10n 10n 200u 400u)
+RL   OUT 0 10k
+.control
+tran 20n 1.2m
+meas tran vfinal find v(out) at=1.19m
+.endc
+.end

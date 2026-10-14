@@ -1,0 +1,12 @@
+Cc1=8p Cz=33p
+.include vfull.inc
+.param Cc1v=8p Cz=33p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 40 10 1gig
+print v(out)
+.endc
+.end

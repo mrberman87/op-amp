@@ -1,0 +1,13 @@
+v1 tiny DC sweep (linear region)
+.include v1g.inc
+RGD INP n_q2g 100
+RGI n_q1g 0 100M
+RINM INM 0 1u
+VSRC INP 0 DC -50u
+RL   OUT 0 10k
+.control
+dc VSRC -50u 50u 2u
+wrdata v1l_sweep.dat v(inp) v(n_q2g) v(n_x) v(out)
+echo swept
+.endc
+.end

@@ -1,0 +1,19 @@
+v1 original topology, unity-gain follower test
+.include v1l.inc
+* unity-gain feedback: OUT -> INM directly
+RINM INM OUT 0.01
+* input to INP
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+set width=100
+print v(out) v(inp) v(n_q1d) v(n_x) v(n_y) v(n_q5c) v(n_b1) v(n_b2) vcc#branch
+print @q5[ic] @q7[ic] @q8[ic]
+ac dec 20 10 10meg
+let m=db(v(out))
+let ph=phase(v(out))
+wrdata v1l_fol.dat m ph v(out)
+echo AC done
+.endc
+.end

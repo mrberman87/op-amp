@@ -1,0 +1,11 @@
+Power-up transient - find natural bias point
+.include core_ramp.inc
+VSRC INP 0 DC 0
+RFB  OUT INM 10m
+RL   OUT 0 10k
+.control
+tran 10u 600u
+wrdata powerup.dat time v(out) v(inm) v(n_q1g) v(n_q1s) v(n_q2s) v(n_tail) v(n_q1d) v(n_x) v(n_y) v(n_q5c) v(n_mire) v(n_b1) v(n_b2) @q4[ic] @j1[id] @j2[id] @q5[ic] @q6[ic] @q7[ic] @q8[ic]
+echo done
+.endc
+.end

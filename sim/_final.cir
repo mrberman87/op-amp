@@ -1,0 +1,13 @@
+FINAL open-loop summary
+.include vfinal.inc
+.param Cc1v=6.8p Cz=22p R6v=950
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_q5c) vcc#branch
+ac dec 40 10 1gig
+print v(out)
+.endc
+.end

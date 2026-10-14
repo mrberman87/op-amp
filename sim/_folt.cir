@@ -1,0 +1,13 @@
+follower transient
+.include v9.inc
+.param R7v=1.5k Rzv=0 Cc1v=5p C4v=100n
+Cz n_q1d 0 15p
+RINM INM OUT 0.01
+VSRC INP 0 PULSE(0 0.2 1u 1n 1n 50u 100u)
+RL   OUT 0 10k
+.ic v(n_q1d)=10 v(n_x)=5 v(n_q1s)=0.93 v(n_q2s)=0.93 v(n_y)=4.6 v(n_q5c)=-2.8 v(n_b1)=-3.5 v(n_b2)=-5 v(n_mc)=9.7 v(n_vb)=9.0 v(out)=-4.3
+.control
+tran 5n 30u uic
+print v(out)
+.endc
+.end

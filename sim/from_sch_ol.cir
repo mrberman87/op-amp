@@ -1,0 +1,27 @@
+* Open-loop Aol / GBW / phase margin, built from the KiCad-exported schematic netlist.
+* Generated netlist (sim/kicad_export.inc) comes from: kicad-cli sch export netlist --format spice opamp.kicad_sch
+.include kicad_export.inc
+
+* supplies
+VCC  +15V 0 DC 15
+VEE  -15V 0 DC -15
+Rgnd GND 0 1u
+
+* keep the high-impedance input gates defined (sim-only) as in sim/vsmd.inc
+RLEAK1 Net-_Q1-G_ 0 100Meg
+RLEAK2 Net-_Q2-G_ 0 100Meg
+* n_y is a high-impedance internal node; reference it like vsmd.inc
+RY     Net-_Q11-E_ 0 100k
+
+* open-loop bench: ground IN-, drive IN+ with 1 V AC, load 10k
+RINM /IN- 0 1u
+VSRC /IN+ 0 DC 0 AC 1
+RL   /OUT 0 10k
+
+.control
+op
+ac dec 40 10 1gig
+set filetype=ascii
+wrdata /tmp/from_sch_ac.dat v(/OUT)
+.endc
+.end

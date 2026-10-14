@@ -1,0 +1,37 @@
+# Reference docs (large PDFs, copyrighted)
+docs/
+
+# Reports
+*.rpt
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / tool backups and local history
+.history/
+*.bak
+*.bak2*
+*.bak-*
+*-backups/
+*.lck
+fp-info-cache
+
+# Logs
+logs/
+
+# Generated exports
+svg/
+svg_out/
+opamp.pdf
+opamp.xml
+opamp_netlist.xml
+
+# Local project settings
+*.kicad_prl
+
+# SPICE sim results (regenerable from .cir/.inc sources)
+sim/*.txt
+sim/*.dat
+sim/*.png
+sim/*.log

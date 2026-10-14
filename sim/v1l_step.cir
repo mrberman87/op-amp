@@ -1,0 +1,11 @@
+v1 closed-loop follower step 0->1V
+.include v1l.inc
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 PULSE(0 1 1u 10n 10n 300u 1m)
+RL   OUT 0 10k
+.control
+tran 5n 300u 0 5n
+wrdata v1l_step.dat v(inp) v(out)
+print tranchar
+.endc
+.end

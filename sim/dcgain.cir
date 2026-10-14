@@ -1,0 +1,14 @@
+Forward-path DC gain (no feedback): sweep INP, watch OUT
+.include core.inc
+RLEAK1 n_q1g 0 100M
+RLEAK2 n_q2g 0 100M
+RY     n_y  0 100k
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+dc VSRC -2m 2m 0.05m
+wrdata dcgain.dat v(inp) v(out) i(vsrc)
+echo dc done
+.endc
+.end

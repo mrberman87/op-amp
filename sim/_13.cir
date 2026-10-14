@@ -1,0 +1,12 @@
+C4 sweep C4=0.01p
+.include v9.inc
+.param R7v=1.5k Rzv=0 Cc1v=6p C4v=0.01p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 30 10 1gig
+print v(out)
+.endc
+.end

@@ -1,0 +1,16 @@
+v1 open loop clear
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 6 10 1meg
+set width=120
+let a_inp_out=db(v(out))
+let a_inp_g2=db(v(n_q2g))
+let a_inp_x=db(v(n_x))
+let a_inp_y=db(v(n_y))
+let a_inp_q5c=db(v(n_q5c))
+print a_inp_g2 a_inp_x a_inp_y a_inp_q5c a_inp_out
+.endc
+.end

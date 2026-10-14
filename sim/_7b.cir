@@ -1,0 +1,12 @@
+v7b R7=470
+.include v7b.inc
+.param C3v=0.1p Rzv=470
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 30 10 1gig
+print v(out)
+.endc
+.end

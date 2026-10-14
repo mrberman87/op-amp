@@ -1,0 +1,21 @@
+Forced-bias probe: does a sane OP exist?
+.include core.inc
+VSRC INP 0 DC 0
+RFB  OUT INM 10m
+RL   OUT 0 10k
+* era-level JFET leakage to keep gates defined, no rail pinning
+RLEAK1 n_q1g 0 100M
+RLEAK2 n_q2g 0 100M
+.nodeset v(n_q1d)=10 v(n_x)=10 v(n_mire)=11 v(n_y)=9.3 v(n_q5c)=-4 v(n_b1)=1 v(n_b2)=-0.4 v(out)=0
+.control
+op
+set width=100
+echo "--- nodes ---"
+print v(inp) v(inm) v(out) v(n_q1g) v(n_q1s) v(n_q2g) v(n_q2s) v(n_tail)
+print v(n_q1d) v(n_x) v(n_y) v(n_q5c) v(n_q5e) v(n_mire)
+print v(n_b1) v(n_b2) v(n_q12b) v(n_q7e) v(n_q8e)
+echo "--- currents ---"
+print i(vcc) i(vee) i(rfb)
+print @j1[id] @j2[id] @q3[ic] @q4[ic] @q5[ic] @q6[ic] @q7[ic] @q8[ic] @q12[ic]
+.endc
+.end

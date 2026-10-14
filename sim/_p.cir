@@ -1,0 +1,11 @@
+v1 dominant-pole on VAS collector Cc=10n
+.include v1lc2.inc
+.param CCv=10n
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 14 10 100meg
+print v(out)
+.endc
+.end

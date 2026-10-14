@@ -1,0 +1,15 @@
+follower verify Cc1=5p Cz=15p
+.include v9.inc
+.param R7v=1.5k Rzv=0 Cc1v=5p C4v=100n
+Cz n_q1d 0 15p
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.nodeset v(n_q1d)=10 v(n_x)=9.5 v(n_q1s)=0.93 v(n_q2s)=0.93 v(n_y)=8.87 v(n_q5c)=2.3 v(n_b1)=1.6 v(n_b2)=0.1 v(out)=0.9 v(n_mc)=9.5 v(n_vc)=9.0
+.control
+op
+print v(out) v(n_x) vcc#branch
+ac dec 40 1k 100meg
+print v(out)
+.endc
+.end

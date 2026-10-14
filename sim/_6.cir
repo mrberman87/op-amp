@@ -1,0 +1,12 @@
+v6 nested+zero Cc2=100p Rz=330 C3=3.5p
+.include v6.inc
+.param Cc2v=100p Rzv=330 C3v=3.5p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 24 10 1gig
+print v(out)
+.endc
+.end

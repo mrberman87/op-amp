@@ -1,0 +1,16 @@
+v1 diag2
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 4 10 100k
+print v(n_q2g)
+print v(n_q1g)
+print v(n_q2s)
+print v(n_q1s)
+print v(n_tail)
+print v(n_q1d)
+.print v(n_x)
+.endc
+.end

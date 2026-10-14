@@ -1,0 +1,13 @@
+v3b fast parts only C3=16p
+.include v3b.inc
+.param C3v=16p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x) v(n_q5c) vcc#branch
+ac dec 24 10 1gig
+print v(out)
+.endc
+.end

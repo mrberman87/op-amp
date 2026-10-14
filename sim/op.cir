@@ -1,0 +1,10 @@
+OP - operating point
+.include core.inc
+.control
+op
+set width=100
+print all
+echo "---- key branch currents ----"
+print i(vcc) i(vee)
+.endc
+.end

@@ -1,0 +1,13 @@
+v1 follower step, C3=220p, nodeset to ON state
+.include v1fc.inc
+.param C3v=220p
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 PULSE(0 1 20u 100n 100n 100u 400u)
+RL   OUT 0 10k
+.nodeset v(n_q1d)=10 v(n_x)=9.5 v(n_y)=8.9 v(n_q5c)=6 v(n_b1)=-0.6 v(n_b2)=-1.2 v(out)=0.9
+.control
+op
+tran 20n 200u
+wrdata v1l_step3.dat v(inp) v(out)
+.endc
+.end

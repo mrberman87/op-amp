@@ -1,0 +1,13 @@
+v1 PM check C3=470p
+.include v1lc.inc
+.param C3v=470p
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 12 1k 200meg
+let dbv=db(v(out))
+let phv=phase(v(out))
+wrdata _pm_470p.dat dbv phv
+.endc
+.end

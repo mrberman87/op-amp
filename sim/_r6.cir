@@ -1,0 +1,11 @@
+R6=2.2k
+.include vfull.inc
+.param R9v=2.7k
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_q5c) v(n_q5e) v(n_x)
+.endc
+.end

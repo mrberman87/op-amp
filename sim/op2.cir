@@ -1,0 +1,22 @@
+OP with unity-gain DC feedback (bias sanity) + start-up assist
+.include core.inc
+VSRC INP 0 DC 0
+RFB  OUT INM 10m
+RL   OUT 0 10k
+* start-up/leakage emulation on otherwise-floating high-Z nodes
+RST_X  n_x 0 10M
+RST_D1 n_q1d 0 10M
+.control
+op
+set width=100
+echo "--- node voltages ---"
+print v(inp) v(inm) v(out) v(n_q1g) v(n_q1s) v(n_q2g) v(n_q2s) v(n_tail)
+echo "--- stage nodes ---"
+print v(n_q1d) v(n_x) v(n_y) v(n_q5c) v(n_q5e) v(n_mire)
+echo "--- output bias stack ---"
+print v(n_b1) v(n_b2) v(n_q12b) v(n_q7e) v(n_q8e) i(rfb)
+echo "--- currents ---"
+print i(vcc) i(vee)
+print @j1[id] @j2[id] @q3[ic] @q4[ic] @q5[ic] @q6[ic] @q7[ic] @q8[ic] @q12[ic]
+.endc
+.end

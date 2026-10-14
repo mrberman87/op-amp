@@ -1,0 +1,12 @@
+follower step long
+.include vfull.inc
+.param Cc1v=6.8p Cz=22p R6v=950
+RINM INM OUT 0.01
+VSRC INP 0 PULSE(0 0.5 2u 20n 20n 30u 120u)
+RL   OUT 0 10k
+.control
+op
+tran 10n 40u
+print v(out)
+.endc
+.end

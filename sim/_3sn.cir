@@ -1,0 +1,13 @@
+v3 servo+forced-ON
+.include v3s.inc
+.param C3v=16p
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.nodeset v(n_q1d)=10 v(n_x)=9.5 v(n_q1s)=0.93 v(n_q2s)=0.93 v(n_y)=8.87 v(n_q5c)=2.3 v(n_b1)=1.6 v(n_b2)=0.1 v(out)=0.9
+.control
+op
+print v(out) v(n_x) v(n_q5c)
+ac dec 24 10 1gig
+print v(out)
+.endc
+.end

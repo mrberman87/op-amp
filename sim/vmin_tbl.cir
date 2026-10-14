@@ -1,0 +1,9 @@
+vmin DC
+.include vmin.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0
+.control
+dc VSRC -20u 20u 10u
+print v(inp) v(n_q2g) v(n_q1g) v(n_x) v(n_q1d) v(n_mire) i(vsrc)
+.endc
+.end

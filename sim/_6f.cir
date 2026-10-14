@@ -1,0 +1,14 @@
+v6 follower oracle
+.include v6.inc
+.param C3v=4p Cc2v=68p Rzv=0
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.nodeset v(n_q1d)=10 v(n_x)=9.5 v(n_q1s)=0.93 v(n_q2s)=0.93 v(n_y)=8.87 v(n_q5c)=2.3 v(n_b1)=1.6 v(n_b2)=0.1 v(out)=0.9 v(n_mc)=9.5 v(n_vb)=9.0
+.control
+op
+print v(out)
+ac dec 40 100k 100meg
+print v(out)
+.endc
+.end

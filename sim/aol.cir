@@ -1,0 +1,14 @@
+Open-loop Aol / GBW / phase margin
+.include core.inc
+.include bench_ol.inc
+.control
+op
+set width=100
+echo "=== OP ==="
+print v(inp) v(inm) v(out) v(n_q1g) v(n_q2g) v(n_x) v(n_y) v(n_q5c) v(n_b1) v(n_b2)
+echo "=== AC Aol ==="
+ac dec 25 10 100meg
+wrdata ac_aol.dat db(v(out)/v(inp)) ph(v(out)/v(inp))
+echo "=== done ==="
+.endc
+.end

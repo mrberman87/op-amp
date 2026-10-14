@@ -1,0 +1,11 @@
+trim t=0.550
+.include vbest.inc
+.param t=0.550
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x) v(n_q5c)
+.endc
+.end

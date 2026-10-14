@@ -1,0 +1,10 @@
+v1 WITHOUT RY (Q11-E/Q5-B return) op check
+.include v1l_nory.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x) v(n_y) v(n_q5c) v(n_q5e) vcc#branch
+.endc
+.end

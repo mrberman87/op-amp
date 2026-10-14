@@ -1,0 +1,16 @@
+v1 direct gate drive (input R removed)
+.include v1g.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RGD INP n_q2g 100
+RGI n_q1g 0 100M
+RL   OUT 0 10k
+.control
+op
+ac dec 5 10 100k
+print db(v(n_q2g))
+print db(v(n_x))
+print db(v(n_q5c))
+print db(v(out))
+.endc
+.end

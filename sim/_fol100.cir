@@ -1,0 +1,12 @@
+v1 follower C3=100p
+.include v1l100.inc
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+ac dec 10 100 50meg
+let dbv=db(v(out))
+let phv=phase(v(out))
+wrdata _fol100.dat dbv phv
+.endc
+.end

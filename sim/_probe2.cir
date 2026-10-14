@@ -1,0 +1,16 @@
+node probe
+.include v9.inc
+.param R7v=1.5k Rzv=0 Cc1v=6p C4v=100n
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 20 1k 1gig
+wrdata _px.txt v(n_x)
+wrdata _pmc.txt v(n_mc)
+wrdata _pq5c.txt v(n_q5c)
+wrdata _pb1.txt v(n_b1)
+wrdata _pout.txt v(out)
+.endc
+.end

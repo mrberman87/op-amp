@@ -1,0 +1,12 @@
+v1 follower step, C3=220p
+.include v1fc.inc
+.param C3v=220p
+RINM INM OUT 0.01
+VSRC INP 0 DC 0 PULSE(0 1 20u 100n 100n 100u 400u)
+RL   OUT 0 10k
+.control
+op
+tran 20n 200u
+wrdata v1l_step2.dat v(inp) v(out)
+.endc
+.end

@@ -1,0 +1,19 @@
+v2 op + forward gain
+.include v2.inc
+RLEAK1 n_q1g 0 100M
+RLEAK2 n_q2g 0 100M
+RINM INM 0 1u
+VSRC INP 0 DC 0
+RL   OUT 0 10k
+.control
+op
+set width=100
+echo "=== nodes ==="
+print v(inp) v(inm) v(out) v(n_q1d) v(n_x) v(n_y) v(n_q5c) v(n_q5e) v(n_b1) v(n_b2)
+print @j1[id] @j2[id] @q3[ic] @q5[ic] @q7[ic] @q8[ic] vcc#branch
+echo "=== DC gain sweep (INP) ==="
+dc VSRC -1m 1m 0.02m
+wrdata v2_dcgain.dat v(inp) v(out)
+echo done
+.endc
+.end

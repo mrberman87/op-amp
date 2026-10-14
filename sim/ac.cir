@@ -1,0 +1,27 @@
+Performance measurement deck (start-assist kept to guarantee bias)
+.include core.inc
+
+* --- start-up / leakage assist (negligible at AC) ---
+RLEAK1 n_q1g 0 100M
+RLEAK2 n_q2g 0 100M
+RY     n_y  0 1G
+
+* --- testbench: open-loop AC via unity-gain DC feedback ---
+VSRC INP 0 DC 0 AC 1
+LFB  OUT INM 1e6
+RL   OUT 0 10k
+CL   OUT 0 10p
+
+.control
+op
+set width=100
+echo "=== OP ==="
+print v(inp) v(inm) v(out) v(n_q1g) v(n_q2g) v(n_x) v(n_y) v(n_q5c) v(n_b1) v(n_b2)
+echo "=== AC (Aol) ==="
+ac dec 25 10 100meg
+wrdata ac_aol.dat db(v(out)/v(inp)) ph(v(out)/v(inp))
+set combplot
+plot db(v(out)/v(inp))
+echo "=== done ==="
+.endc
+.end

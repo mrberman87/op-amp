@@ -1,0 +1,11 @@
+v1 true open loop, INM grounded
+.include v1l.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+ac dec 10 10 100k
+wrdata v1l_ol.dat v(inp) v(n_q2g) v(n_x) v(n_y) v(n_q5c) v(out)
+.endc
+.end

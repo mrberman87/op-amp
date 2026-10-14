@@ -1,0 +1,12 @@
+centered check
+.include vfull.inc
+RINM INM 0 1u
+VSRC INP 0 DC 0 AC 1
+RL   OUT 0 10k
+.control
+op
+print v(out) v(n_x) v(n_q5c) v(n_q5e) v(n_b1) v(n_b2) vcc#branch
+ac dec 40 10 1gig
+print v(out)
+.endc
+.end
