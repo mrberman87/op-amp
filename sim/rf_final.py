@@ -2,9 +2,8 @@
 """Fully self-biased realization of the winning single-stage op-amp.
 
 The ideal current sources used in rf_wide.py (Itail, Ibuf) are replaced by a
-real NPN current mirror fed from a resistor reference, and an offset-trim
-rheostat RT1 is added at the output mirror emitter.  This is the netlist the
-KiCad schematic (gen_sch.py) captures.
+real NPN current mirror fed from a resistor reference.  This is the netlist
+the KiCad schematic (gen_sch_rf.py) captures.
 
 Bias generator (shared base vref):
     Rbias  +15 -> vref ; Qb diode (C=B=vref, E=veb) ; Reb veb -> -15
@@ -13,15 +12,22 @@ Bias generator (shared base vref):
 
 Signal path:
     NPN diff pair Q1/Q2 (BFP420)
-      -> mirror emitter degeneration Re3/Re4 (Re4 = RT1 trim)
+      -> mirror emitter degeneration Re3/Re4
       -> cascoded PNP mirror Q3/Q3c, Q4/Q4c (BFP520) with regulated
          (gain-boosted) cascode helper Qh + Rc
       -> unity-gain NPN buffer Q5 (BFP420) -> OUT
 
+Offset: the amplifier has a *systematic* input offset of ~16 mV.  It comes
+from the input pair's collector voltages (Q1's sits at the mirror reference
+node ~+14 V, Q2's at the output node, so VAF ~28 V gives a ~40 % current
+error) plus the saturated reference-side cascode Q3c.  It is nulled by a
+fixed asymmetry in the mirror degeneration -- Re4 = 54.9R against Re3 = 22R
+-- so no trimmer is required.
+
 Recommended operating point:
     Rbias 13.7k, Reb 1k -> Iref ~2 mA ; Re_tail 1k -> Itail 2 mA ;
-    Re_buf 390 -> Ibuf ~5 mA ; Re3 22, (RT1) Re4 ~30 ; Rc 15k ; Cp 0.1p
-    -> Aol 60.5 dB, f-3dB 15.9 MHz, GBW 7.0 GHz, PM 64 deg, Vos ~14 mV.
+    Re_buf 390 -> Ibuf ~5 mA ; Re3 22, Re4 54.9 ; Rc 15k ; Cp 0.1p
+    -> Aol 58.8 dB, f-3dB 12.8 MHz, GBW 6.08 GHz, PM 66 deg, Vos ~0 (RL = 10k)
 """
 import math, subprocess, os
 from rf_frontend import BFP420, BFP520
@@ -32,7 +38,7 @@ MODELS = "\n.model QN %s\n.model QP %s\n" % (BFP420, BFP520)
 
 
 def circuit(rbias="13.7k", reb="1k", ret="1k", rebuf="390", re3="22",
-            re4="30", rc="15k", cp="0.1p", rl="1k", voff=None):
+            re4="54.9", rc="15k", cp="0.1p", rl="1k", voff=None):
     src = (f"Voff INN 0 DC {voff}\nVSRC INP 0 DC 0 AC 1\n"
            if voff is not None else "VSRC INP 0 DC 0 AC 1\n")
     return f"""* self-biased single-stage op-amp
@@ -50,7 +56,7 @@ Rebuf veb2 -15 {rebuf}
 * ---- input pair ----
 Q1 c1 INP T QN
 Q2 c2 INN T QN
-* ---- mirror emitter degeneration (Re4 = RT1 trim) ----
+* ---- mirror emitter degeneration (Re4 fixed at the Vos-null value) ----
 Re3 15 e3 {re3}
 Re4 15 e4 {re4}
 * ---- regulated cascoded PNP mirror load ----
@@ -147,9 +153,9 @@ def metrics(tag="", **kw):
 
 if __name__ == "__main__":
     print("== self-biased single-stage op-amp (target 60 dB / 10 MHz) ==")
-    op = metrics("recommended", re4="30", rc="15k")
+    op = metrics("recommended", re4="54.9", rc="15k")
     for l in op:
         print("     ", l)
-    print("-- Vos trim range (RT1 on Q4 emitter) --")
-    for re4 in ("0", "15", "30", "45", "60"):
-        metrics("Re4(RT1)=%s" % re4, re4=re4, rc="15k")
+    print("-- Vos vs Re4 (fixed asymmetry nulls the systematic offset) --")
+    for re4 in ("30", "45", "51", "54.9", "60"):
+        metrics("Re4=%s" % re4, re4=re4, rc="15k")
