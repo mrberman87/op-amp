@@ -90,13 +90,26 @@ def main():
     # KiCad 10 zones are multi-layer; GetLayerName() reports the primary only,
     # so ask each zone which layers it actually covers
     zones = set()
+    thermal = []
+    keepouts = []
     for z in board.Zones():
+        if z.GetIsRuleArea():                         # mounting-hole copper keepouts
+            keepouts.append(z.GetZoneName())
+            continue
+        if z.GetZoneName().startswith("thermal_"):    # local heat-spreading copper
+            thermal.append((z.GetZoneName(), z.GetNetname()))
+            continue
         for i in range(40):
             nm = board.GetLayerName(i)
             if nm and nm.endswith(".Cu") and z.IsOnLayer(i):
                 zones.add((z.GetNetname(), nm))
-    want = {("GND", "In1.Cu"), ("GND", "B.Cu"), ("+15V", "In2.Cu"), ("-15V", "In2.Cu")}
-    check("pours: GND on In1+B, rails on In2", zones == want, str(sorted(zones)))
+    # In2.Cu also carries a GND edge frame (reference for OUT on B.Cu)
+    want = {("GND", "In1.Cu"), ("GND", "B.Cu"), ("GND", "In2.Cu"),
+            ("+15V", "In2.Cu"), ("-15V", "In2.Cu")}
+    check("pours: GND on In1+B (+In2 frame), rails on In2", zones == want, str(sorted(zones)))
+    check("thermal copper: R19 +15 V pad", ("thermal_R19", "+15V") in thermal, str(thermal))
+    check("copper keepouts on both mounting holes",
+          {"keepout_H1", "keepout_H2"} <= set(keepouts), str(sorted(keepouts)))
 
     rpt = "/tmp/opencode/verify_board.drc"
     subprocess.run(["kicad-cli", "pcb", "drc", "--severity-all", "-o", rpt, BOARD],

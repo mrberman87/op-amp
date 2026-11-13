@@ -38,6 +38,7 @@ DEFAULTS = dict(
     r4="6.8k", r9="8.2k", r10="6.8k", r11="11k",     # cascode dividers
     r5="22", r8="20", r6="22k",                      # mirror degeneration / helper
     r19="1k", r20="50", c6="220u",                   # stage-2 load (1206) / emitter / bypass
+    r21="33", r22="33", r23="33",                    # base stoppers, BFP420 followers
     c7="68p",                                        # Miller compensation (sets 60 dB / 11 MHz)
     r12="1.8k", r13="1.2k", r14="10k",               # Vbe multiplier
     r15="4.7", r16="4.7", r17="47", r7="10k",        # ballast / isolation / load
@@ -81,19 +82,23 @@ Q7 c2 vcp n2 QP
 Q8 vcp n2 15 QP
 R6 vcp -15 {p['r6']}
 * ---- buffer 1 ----
-Q11 x8 c2 d1 QN
+R21 c2 c2b {p['r21']}
+Q11 x8 c2b d1 QN
 Q12 15 vcd x8 Q4N
 * ---- stage 2: Miller-compensated CE ----
 Q13 d2 d1 e1 QN
 R19 15 d2 {p['r19']}
 R20 e1 0 {p['r20']}
 C6 e1 0 {p['c6']}
+C13 e1 0 100n
 C7 d1 d2 {p['c7']}
 * ---- buffer 2 ----
-Q14 x9 d2 d3 QN
+R22 d2 d2b {p['r22']}
+Q14 x9 d2b d3 QN
 Q15 15 vcd x9 Q4N
 * ---- class-AB output ----
-Q16 xo d3 n8 QN
+R23 d3 d3b {p['r23']}
+Q16 xo d3b n8 QN
 Q17 15 vcd xo Q4N
 R15 n8 OUTA {p['r15']}
 Q18 -15 b9 n9 QP

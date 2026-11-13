@@ -28,74 +28,73 @@ Known-good state:
 
 ## 2. PCB layout
 
-Started: 4-layer board generated from the schematic table, all parts on top.
-`opamp.kicad_pcb` was first produced by `gen_pcb.py`; it is now edited in place
-(J1 locked by hand, placement by `place.py`), so `gen_pcb.py` must not be re-run
-on it. `set_rules.py` writes the rules; `verify_board.py` gates (inside `./check.sh`).
+The board is complete: placed, routed, KiCad DRC 0 violations / 0 unconnected
+under the project's net-class rules, after two review + adversarial-review
+passes on the placement and two on the routed board.
+
+Pipeline (the board is edited in place; `gen_pcb.py` must not be re-run):
+`place.py` syncs parts and pad nets from `gen_sch_rf.NET`, shapes the outline
+and pours and places the parts; `route.py` routes; `set_rules.py` /
+`set_stackup.py` write rules and stack-up; `verify_board.py` gates. All run
+from `./check.sh` except `place.py` / `route.py` (deliberate steps:
+`python3 place.py --seed 27 && python3 route.py`). Do not use KiCad's "Update
+PCB from Schematic" (schematic auto net names differ from the board's).
 
 **Done**
-- [x] **2.1 Stackup** (`set_stackup.py`, written into the board file). 4 copper,
-      1.606 mm: F.Cu 1 oz signal+parts / 0.21 mm 7628 / In1.Cu ½ oz solid GND /
-      1.065 mm core / In2.Cu ½ oz +15 V and −15 V pours / 0.21 mm 7628 /
-      B.Cu 1 oz GND. In1/In2 typed as power planes. Matches the common default
-      4-layer build (e.g. JLC04161H-7628) — confirm dielectric thicknesses with
-      the fab. Every F.Cu trace references the unbroken In1 GND; the In2 split
-      is referenced to B.Cu GND, so it never sits under a signal.
-- [x] **2.2 Outline.** 50 × 40 mm. Courtyards ≥ 1 mm inside the edge; a
-      courtyard-free strip along the bottom (y > 37.2 mm) and left (x < 2.2 mm)
-      edges is reserved for the OUT trace back to J1 pin 1.
-- [x] **2.3 All components on F.Cu** — asserted by the gate, not assumed.
-- [x] **2.4 SOT-343 pad 4.** BFP420 is 4-lead (1=B, 2=E, 3=C, 4=E); pad 4 is
-      created and tied to pad 2's net on all six BFP420s.
-- [x] **2.5 Netlist integrity.** 117/117 schematic pins match their board pads;
-      nets are taken from `gen_sch_rf.NET`, so board and schematic cannot drift.
-- [x] **2.6 Design rules.** min clearance 0.2 mm, min track 0.2 mm, via 0.6/0.3;
-      classes Default / Power (+/−15 V, GND: 0.5 mm, 0.8/0.4 via) / Analog (hi-Z).
-- [x] **2.7 Placement** (`place.py`, after a review + adversarial review).
-      Stage 1 is a ring on its side so INP/INN reach their bases from J1
-      without crossings; stage 2 above it with C6 beside Q13; output stage on
-      the right edge, NPN half over +15 V and PNP half over −15 V; R17/R7
-      bottom-right. Q1/Q2 2.8 mm apart (shared emitter copper), mirror Q4/Q6
-      4.6 mm apart with heat sources placed symmetrically about it. One
-      ratsnest crossing left, c1 × vcp — inherent in the circuit topology; take
-      it on vcp (DC bias) as a B.Cu hop. Courtyards ≥ 1.0 mm apart.
-- [x] **2.7a In2.Cu split.** +15 V top half, −15 V bottom half, plus a +15 V
-      finger down the left edge under J1 pin 5 and C1/C11 (J1's +15 V pin is
-      in the bottom half). Every rail pad sits over its own pour except R1.1
-      (+15 V, 7 mm from the pour): give it a short F.Cu trace.
-- [x] **2.7b Local decoupling** (added after review): C8 at Q17's collector,
-      C9 at Q18's collector, C10 at Q12's base, C4 at Q3's base, C5 at
-      Q15/Q17's bases, C11/C12 10 µF bulk at J1. All within 3.8 mm.
-- [x] **2.7c Mounting holes + fiducials.** M3 holes H1 (top-left) and H2
-      (bottom-right); fiducials FID1–3 on three corners; board ID on B.Silk.
-      Silkscreen references 1.0 mm / 0.15 mm, each beside its own part.
+- [x] **2.1 Stack-up** (`set_stackup.py`). 4 copper, 1.606 mm: F.Cu 1 oz
+      signal+parts / 0.21 mm 7628 / In1.Cu ½ oz solid GND / 1.065 mm core /
+      In2.Cu ½ oz rails / 0.21 mm 7628 / B.Cu 1 oz GND. In1/In2 typed as power
+      planes. The common default 4-layer build (e.g. JLC04161H-7628) — confirm
+      dielectric thicknesses with the fab.
+- [x] **2.2 Outline.** 50 × 40 mm, 2 mm corner radius. Two M3 holes (H1
+      top-left, H2 bottom-right) with Ø7 mm copper keepouts on every layer;
+      fiducials FID1–3; board ID on B.Silk.
+- [x] **2.3 All components on F.Cu**, asserted by the gate.
+- [x] **2.4 SOT-343 pad 4** tied to pad 2 on all six BFP420s.
+- [x] **2.5 Netlist integrity.** Every schematic pin's net is on its board pad
+      (gate), including the six pads re-netted by the J1 re-pin and stoppers.
+- [x] **2.6 Design rules.** Default 0.2/0.2, Analog (high-Z) 0.2/0.25, Power
+      0.25/0.5 with 0.8/0.4 vias; min annular ring 0.15 mm (0.6/0.3 via).
+- [x] **2.7 Placement** (`place.py --seed 27`). Stage 1 is a ring on its side
+      so INP/INN reach their bases without crossings; stage 2 above; output
+      stage on the right edge. Q1/Q2 2.8 mm apart, mirror Q4/Q6 4.5 mm with
+      heat sources placed symmetrically; base stoppers 2.3–3.4 mm from their
+      bases; C13 2.7 mm from Q13's emitter; R24 (feedback) 3.7 mm from Q1's
+      base. Courtyards aim for 1.0 mm apart (≥ 0.8 mm accepted).
+- [x] **2.7a In2.Cu.** +15 V top half, −15 V bottom half, inside a 2.5 mm GND
+      frame round the edge (the reference plane for OUT on B.Cu), plus a
+      +15 V tab under J1 (x < 8.5 mm, y < 26.25 mm) so J1 pin 5 plugs straight
+      in. Rails have zone priority over the frame.
+- [x] **2.7b Decoupling.** C8/C9 at the Q17/Q18 collectors (7.5 / 2.8 mm),
+      C10 at Q12's base, C14 at Q15's base, C5 at Q17's base, C4 at Q3's base
+      (all ≤ 3.6 mm), C13 + C6 at Q13's emitter, C1/C11 (+15 V) in the upper
+      half by J1, C2/C12 (−15 V) by J1. Each cap has its own via to its plane.
+- [x] **2.8 Routing** (`route.py`): F.Cu at 0/45/90°, 577 segments, 113 vias,
+      no crossings on the stage-2 signal / AC-ground nets. Routed lengths:
+      c2 8.0, c2b 3.0, d1 9.2, d2 16.1, e1 10.5, d3 14.2, INP 7.2, INN 11.7
+      (incl. R24/R25), OUTA 51 mm (low impedance; ≥ 2.5 mm from c2/d1/d2).
+- [x] **2.9 OUT** runs on B.Cu, within 2.5 mm of the edge, over the In2 GND
+      frame, from R17/R7 to J1 pin 4. Shielded from F.Cu by In1.
+- [x] **2.10 Thermal copper.** R19's +15 V pad has an F.Cu copper area tied by
+      its via to In2.
+- [x] **2.11 Ground.** In1 solid; B.Cu pour one piece; GND stitching vias
+      round the perimeter every 3 mm.
+- [x] **2.13 Test points.** TP1–TP7: +15V, −15V, GND, vcn, vcd, OUTA, OUT.
+      None on c2/d2: a probe pad on a high-impedance node adds capacitance.
+- [x] **2.14 Silkscreen.** References 1.0 mm / 0.15 mm (0.8 mm / 0.15 mm in
+      four crowded spots), each placed beside its own part where possible.
 
-**To do**
-- [ ] **2.8 Routing.** Nothing is wired yet (100 unconnected pads is expected
-      at this stage). Route F.Cu over the intact In1.Cu ground; do not put signal
-      traces on In1.Cu or In2.Cu.
-- [ ] **2.9 High-Z discipline.** Route c2, d1, d2, d3 and the C7 Miller loop
-      first, shortest possible, each with a via stitch to In1.Cu nearby.
-      Current spread (half-perimeter): c2 10.8, d1 5.1, d2 19.5, e1 7.9 mm.
-      Route OUT from R17/R7 along the bottom edge and up the left edge to J1
-      pin 1 (the reserved strip), not across stage 1.
-- [ ] **2.10 Thermal copper.** R19 (1206, 156 mW) needs a pour plus 2–3 vias
-      into In2.Cu; keep it away from Q13's base — 156 mW in still air shifts a
-      nearby BJT's Vbe by several hundred µV and the input offset is ~0.56 mV.
-- [ ] **2.11 Ground strategy.** Single solid GND, star-referenced at J1 pin 4.
-      Do not split the plane. Stitch the perimeter every 3–5 mm.
-- [ ] **2.12 Guard ring** around Q1/Q2/Q3 and the input traces from J1.
-- [ ] **2.13 Test points.** None placed yet: add +15V, −15V, vcn, vcd, c2, d2,
-      OUTA, OUT. Bring-up of this circuit is blind without them.
-- [ ] **2.16 Re-check after routing:** `kicad-cli pcb drc` must reach 0 violations
-      apart from nothing, and fill zones (`B` in the GUI) before generating
-      Gerbers.
+**Declined, with reason**
+- **2.12 Guard ring.** Guard rings protect pA-level inputs from leakage; the
+  input bias current here is ~21 µA, so board leakage is irrelevant.
 
-**Deliberate choice worth knowing:** R17 (47 Ω isolation) and R7 (10 k load)
-sit at the output stage, bottom-right, so R17 isolates the long OUT trace's
-capacitance from the output pair. OUT then returns to J1 pin 1 along the bottom
-and left edges (a part-free strip is reserved for it), past the tail and bias
-parts and away from the stage-1/stage-2 high-impedance nodes.
+**Open / judgment calls for the bench**
+- [ ] **2.15** R1 and R4 (+15 V ends) sit over the −15 V half and reach the
+      +15 V pour through ~9.5 mm stubs (≈ 2 mA each; harmless, not elegant).
+- [ ] **2.16** No base stoppers on Q1/Q2 (noise vs the 10 Ω R25) or on the
+      MMBTH81 output PNP Q18 (600 MHz part). Add if the bench shows GHz
+      oscillation.
+- [ ] **2.17** Refill zones (`B`) after any edit and before generating Gerbers.
 
 ---
 
@@ -124,7 +123,11 @@ parts and away from the stage-1/stage-2 high-impedance nodes.
 | R17 | 47 | 0603 | — | isolation |
 | R18 | 470 | 0603 | — | tail collector |
 | R20 | 50 | 0603 | — | stage-2 emitter |
-| C1–C5, C8–C10 | 100n | 0603 | — | |
+| C1–C5, C8–C10, C13, C14 | 100n | 0603 | — | |
+| R21–R23 | 33 | 0603 | — | base stoppers |
+| R24 / R25 | 10k / 10 | 0603 | — | on-board feedback (60 dB) |
+| TP1–TP7 | test pad | Ø1.5 mm SMD | — | |
+| J1 | 6-way screw terminal 3.5 mm | THT | — | Phoenix PT 1,5/6-3,5-H or equivalent |
 | C11, C12 | 10 µF, ≥25 V X5R | 1206 | — | rail bulk at J1 |
 | C6 | 220 µF | 6.3×5.4 mm | — | stage-2 bypass |
 | C7 | 68 p | 0603 | — | Miller |

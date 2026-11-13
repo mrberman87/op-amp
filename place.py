@@ -41,6 +41,7 @@ BOARD = os.path.join(ROOT, "opamp.kicad_pcb")
 W, H = 50.0, 40.0          # board size, mm
 EDGE = 1.0                 # courtyard to board edge, mm
 GAP = 1.0                  # courtyard to courtyard, mm (a track plus silk labels)
+GAP_MIN = 0.8              # what the legality test accepts (the anneal aims for GAP)
 GRID = 0.25                # placement grid, mm
 
 POWER = {"+15V", "-15V", "GND"}
@@ -48,12 +49,30 @@ RAIL_W = 15.0              # per mm a rail pad sits outside its own In2.Cu pour
 THERM_W = 2.0              # thermal-gradient weight across matched pairs
 
 # In2.Cu: +15 V on the top half, -15 V on the bottom half, split along y = 20
-# with a 1.5 mm gap.  J1 (locked) has its +15 V pin at y = 24.8, in the bottom
-# half, so the +15 V pour drops a finger down the left edge to the bottom of
-# the board, under J1 pin 5 and C1/C11 (x < FINGER_X); the -15 V pour stays
-# 0.5 mm clear of it.
+# with a 1.5 mm gap.  J1 (screw terminal, locked) has its +15 V pin 5 at
+# y = 24.5, in the bottom half, so the +15 V pour keeps a short tab under J1's
+# pin row (x < FINGER_X, y < FINGER_Y) that ends between pins 5 and 6; the
+# -15 V pour stays 0.5 mm clear of it.  J1's pins are plated through, so pin 5
+# lands in the tab directly.  C1/C11 sit in the upper half, over the main
+# +15 V plane.
+
+# J1: 6-way 3.5 mm screw terminal on the left edge, wire entries facing out,
+# pin 1 at the top.  (board-local centre of pin 1, rotation)
+J1_PLACE = (5.9, 10.5, 270)         # pin-1 arrow silk stays on the board
+UPPER = {"C1", "C11"}
+EDGE_PARTS = {"J1"}            # edge connector: its courtyard may meet the edge          # must sit wholly in the upper (+15 V) half
+TARGET = {"C1": (11.0, 9.0), "C11": (11.0, 12.0),
+          # power test points near the board edge, easy to probe
+          "TP1": (44.0, 14.0), "TP2": (44.0, 32.0), "TP3": (30.0, 35.0)}
 SPLIT_TOP, SPLIT_BOT = H / 2 - 0.75, H / 2 + 0.75
-FINGER_X = 5.95
+# In2.Cu also carries a GND frame FRAME mm wide round the board edge: OUT runs
+# on B.Cu along the edge, and B.Cu's nearest plane is In2, so the frame gives
+# OUT a GND reference instead of the rail pours.  The perimeter stitching vias
+# tie the frame to In1 and B.Cu.  The rail pours sit inside it.
+FRAME = 2.5
+FINGER_X, FINGER_Y = 8.5, 26.25        # tab ends between J1 pins 5 and 6;
+                                       # wide enough to pass J1 pin 4's antipad
+CORNER_R = 2.0             # board corner radius, mm
 
 # Footprints that exist only on the board (not in the schematic).
 BOARD_ONLY = {
@@ -65,16 +84,17 @@ BOARD_ONLY = {
 }
 HOLES = {"H1", "H2"}
 
-BOARD_ID = "DISCRETE OP AMP  REV E  4L 1.6mm"
+BOARD_ID = "DISCRETE OP AMP REV E"
 
 HIGH_Z = {"c2", "d1", "d2", "d3", "a1", "n1", "n2", "vcp", "e3", "e4", "x8",
-          "x9", "xo", "db", "b9", "n8", "n9", "e1", "Tc", "vet", "veb", "vref", "T"}
+          "x9", "xo", "db", "b9", "n8", "n9", "e1", "Tc", "vet", "veb", "vref", "T",
+          "c2b", "d2b", "d3b"}
 
 # Ratsnest-crossing classes.  On a single signal layer every crossing is a
 # B.Cu hop or a jumper: never acceptable on the stage-2 signal / AC-ground
 # nets, cheap on the bypassed DC bias lines.  OUT is excluded: it is routed
 # round the board edge through the reserved strip, not along its ratsnest.
-NO_CROSS = {"e1", "d1", "d2", "c2"}
+NO_CROSS = {"e1", "d1", "d2", "c2", "c2b", "d2b", "d3b"}
 DC_BIAS = {"vcd", "vcn", "vcp"}
 EDGE_ROUTED = {"OUT"}
 
@@ -133,8 +153,8 @@ PLAN = {
     # vcn divider beside the tail
     "R4": (23.0, 30.0, 90), "R9": (23.0, 34.5, 90), "C4": (26.0, 32.0, 90),
     # rail decoupling right under the J1 rail pins
-    # +15 V entry caps stacked under J1, + pads inside the In2.Cu finger
-    "C11": (4.75, 31.5, 0), "C1": (3.75, 34.5, 0),
+    # +15 V caps in the upper half beside J1, over the main +15 V plane
+    "C11": (11.0, 12.0, 0), "C1": (11.0, 9.0, 0),
     "C2": (8.0, 31.25, 90), "C12": (9.5, 34.75, 0),
     # stage 2 along the top
     "Q12": (13.0, 4.0, 90), "Q11": (13.0, 8.5, 90), "C7": (17.0, 6.0, 90),
@@ -149,6 +169,13 @@ PLAN = {
     "Q17": (45.0, 4.0, 90), "Q16": (45.0, 8.5, 90), "R15": (45.0, 12.5, 90),
     "R16": (45.0, 16.5, 90), "Q18": (45.0, 23.0, 270),
     "C8": (48.0, 8.0, 90), "C9": (48.0, 26.0, 90),
+    # base stoppers, extra bypass, test points
+    "R21": (11.0, 8.5, 0), "R22": (33.0, 8.5, 0), "R23": (41.0, 8.5, 0),
+    "C13": (24.0, 13.0, 90), "C14": (36.5, 1.5, 0),
+    "R24": (11.0, 22.0, 0), "R25": (11.0, 25.0, 0),
+    "TP1": (44.0, 15.0, 0), "TP2": (44.0, 30.0, 0), "TP3": (30.0, 34.0, 0),
+    "TP4": (26.0, 30.0, 0), "TP5": (34.0, 16.0, 0), "TP6": (46.0, 20.0, 0),
+    "TP7": (38.0, 34.0, 0),
     "R17": (40.75, 31.0, 270), "R7": (40.75, 35.25, 270),
     # board-only: mounting holes on the diagonal, fiducials on three corners
     "H1": (3.6, 3.6, 0), "H2": (46.4, 36.4, 0),
@@ -161,11 +188,12 @@ FID_TARGET = {"FID1": (47.5, 2.5), "FID2": (11.0, 36.0), "FID3": (34.0, 36.0)}
 # leaves the output stage and runs back to J1 pin 1 along the board edges; C6
 # (the 220 uF can) fills the dead corner above J1 instead of sitting in the
 # stage-2 -> output path.
-FIXED = {"R17", "R7", "H1", "H2", "C1", "C11"}
+FIXED = {"R17", "R7", "H1", "H2"}
 
-# Courtyard-free strips (x0, y0, x1, y1): the OUT return along the bottom
-# edge, up the left edge, into J1 pin 1.
-KEEPOUT = [(0.0, 37.2, W, H), (0.0, 0.0, 2.2, H)]
+# Courtyard-free strips (x0, y0, x1, y1).  None now: OUT returns to J1 pin 1
+# on B.Cu (J1 is plated-through), shielded from the F.Cu high-Z nodes by the
+# In1.Cu GND plane, so no F.Cu edge strip is needed.
+KEEPOUT = []
 
 # matched pairs: (a, b, max centre distance mm, weight); same rotation too.
 # Q1/Q2 may nearly touch (PAIR_GAP) so their emitters can share one T pad.
@@ -176,12 +204,22 @@ PAIRS = [("Q1", "Q2", 2.75, 12.0), ("Q4", "Q6", 4.5, 15.0),
 PAIR_GAP = 0.3
 THERMAL_PAIRS = [("Q1", "Q2"), ("Q4", "Q6")]
 # (part, pad, anchor part, anchor pad, weight): decoupling and bypass placement
-ATTRACT = [("C1", "1", "J1", "5", 1.0), ("C2", "1", "J1", "6", 1.0),
-           ("C11", "1", "J1", "5", 1.0), ("C12", "1", "J1", "6", 1.0),
+ATTRACT = [("C2", "1", "J1", "6", 1.0),
+           ("C12", "1", "J1", "6", 1.0),
            ("C8", "1", "Q17", "3", 2.0), ("C9", "1", "Q18", "3", 2.0),
            ("C10", "1", "Q12", "1", 2.0), ("C5", "1", "Q17", "1", 1.5),
            ("C4", "1", "Q3", "1", 2.0), ("C6", "1", "Q13", "2", 3.0),
-           ("C3", "1", "Q19", "3", 1.0)]
+           ("C3", "1", "Q19", "3", 1.0),
+           # base stoppers belong on the base pad they protect
+           ("R21", "2", "Q11", "1", 6.0), ("R22", "2", "Q14", "1", 6.0),
+           ("R23", "2", "Q16", "1", 6.0),
+           # second bypasses: ceramic at Q13's emitter, local cap at Q15's base
+           ("C13", "1", "Q13", "2", 12.0), ("C14", "1", "Q15", "1", 3.0),
+           # feedback network at the inverting input (Q1's base): the long
+           # run is OUTA (low impedance), not the INN node
+           ("R24", "2", "Q1", "1", 4.0), ("R25", "1", "Q1", "1", 4.0),
+           # Miller cap straight across Q13's base and collector
+           ("C7", "2", "Q13", "1", 2.0), ("C7", "1", "Q13", "3", 2.0)]
 
 
 def _rect_dist(x, y, r):
@@ -193,9 +231,12 @@ def _rect_dist(x, y, r):
 def rail_miss(net, x, y, m=0.4):
     """How far (mm) a rail pad at (x, y) is from its own In2.Cu pour."""
     if net == "+15V":
-        rects = [(0, 0, W, SPLIT_TOP - m), (0, 0, FINGER_X - m, H)]
+        # the tab under J1 is not counted: it serves J1 pin 5 only, and J1's
+        # pin row walls it off from every other part
+        rects = [(FRAME + 0.5 + m, FRAME + 0.5 + m, W - FRAME - 0.5 - m, SPLIT_TOP - m)]
     else:
-        rects = [(FINGER_X + 0.5 + m, SPLIT_BOT + m, W, H)]
+        rects = [(FINGER_X + 0.5 + m, SPLIT_BOT + m, W - FRAME - 0.5 - m, H - FRAME - 0.5 - m),
+                 (FRAME + 0.5 + m, FINGER_Y + 0.5 + m, W - FRAME - 0.5 - m, H - FRAME - 0.5 - m)]
     return min(_rect_dist(x, y, r) for r in rects)
 
 
@@ -300,6 +341,11 @@ class Placer(object):
                 da = max(math.hypot(hx - ax, hy - ay), 2.5)
                 db = max(math.hypot(hx - bx, hy - by), 2.5)
                 tot += THERM_W * mw * abs(1.0 / da - 1.0 / db)
+        for r, (tx, ty) in TARGET.items():
+            x, y = self.pos[r]
+            tot += 0.5 * (abs(x - tx) + abs(y - ty))
+        for r in UPPER:
+            tot += RAIL_W * max(0.0, self.cbox(r)[3] - (SPLIT_TOP - 0.3))
         for r, (tx, ty) in FID_TARGET.items():
             if r in self.pos:
                 x, y = self.pos[r]
@@ -348,9 +394,16 @@ class Placer(object):
         """Overlap (with GAP) against every other part plus edge excursion."""
         x0, y0, x1, y1 = self.cbox(ref)
         v = 0.0
-        if ref not in HOLES:
+        if ref not in HOLES and ref not in EDGE_PARTS:
             v = max(0.0, EDGE - x0) + max(0.0, EDGE - y0) + \
                 max(0.0, x1 - (W - EDGE)) + max(0.0, y1 - (H - EDGE))
+            # rounded corners: the box corner nearest each board corner must
+            # stay EDGE inside the arc
+            R = CORNER_R
+            for (cx, cy, px, py) in ((R, R, x0, y0), (W - R, R, x1, y0),
+                                     (W - R, H - R, x1, y1), (R, H - R, x0, y1)):
+                if (px - cx) * (cx - W / 2) > 0 and (py - cy) * (cy - H / 2) > 0:
+                    v += max(0.0, math.hypot(px - cx, py - cy) - (R - EDGE))
             v *= 4.0
         for (k0, l0, k1, l1) in KEEPOUT:
             if ref in self.locked or ref in HOLES:
@@ -479,6 +532,43 @@ class Placer(object):
             self.pos, self.rot = best[1], best[2]
         return self.wire_cost(), self.total_violation()
 
+    def legal_violation(self):
+        """Violation measured against GAP_MIN rather than the GAP target."""
+        global GAP
+        keep, GAP = GAP, GAP_MIN
+        try:
+            return self.total_violation()
+        finally:
+            GAP = keep
+
+    def legalize_local(self, rounds=400, seed=0):
+        """Clear small residual overlaps left by the anneal: move only parts
+        that are still in violation, in small steps, accepting a move when it
+        lowers the violation (wire cost may rise a little)."""
+        rnd = random.Random(seed)
+        steps = [(dx, dy) for dx in (-1.0, -0.5, -0.25, 0, 0.25, 0.5, 1.0)
+                 for dy in (-1.0, -0.5, -0.25, 0, 0.25, 0.5, 1.0) if dx or dy]
+        for _ in range(rounds):
+            bad = [r for r in self.movable if self.part_violation(r) > 1e-9]
+            if not bad:
+                return True
+            r = rnd.choice(bad)
+            v0 = self.part_violation(r)
+            nets = self.nets_of.get(r, set())
+            w0 = sum(self.net_cost(n) for n in nets)
+            best = None
+            x, y = self.pos[r]
+            for dx, dy in steps:
+                self.pos[r] = (self.snap(x + dx), self.snap(y + dy))
+                v = self.part_violation(r)
+                if v < v0 - 1e-9:
+                    w = sum(self.net_cost(n) for n in nets)
+                    score = v * 1000 + (w - w0)
+                    if best is None or score < best[0]:
+                        best = (score, self.pos[r])
+            self.pos[r] = best[1] if best else (x, y)
+        return self.total_violation() < 1e-9
+
     # ---- report / write ----
     def spans(self):
         rows = []
@@ -503,27 +593,76 @@ def resize_outline_and_pours(board, x0, y0):
         return pcbnew.VECTOR2I(int(round((x0 + x) * 1e6)), int(round((y0 + y) * 1e6)))
 
     edges = [d for d in board.GetDrawings() if d.GetLayer() == pcbnew.Edge_Cuts]
-    if len(edges) != 4:
-        raise SystemExit("expected a 4-segment rectangular outline, found %d" % len(edges))
-    corners = [(0, 0, W, 0), (W, 0, W, H), (W, H, 0, H), (0, H, 0, 0)]
-    for d, (a, b, c, e) in zip(edges, corners):
-        d.SetStart(P(a, b))
-        d.SetEnd(P(c, e))
+    width = edges[0].GetWidth() if edges else pcbnew.FromMM(0.05)
+    for d in edges:
+        board.Remove(d)
+    R = CORNER_R
+    k = R * (1 - math.sqrt(0.5))          # arc midpoint inset from the corner
+    lines = [(R, 0, W - R, 0), (W, R, W, H - R), (W - R, H, R, H), (0, H - R, 0, R)]
+    arcs = [((W - R, 0), (W - k, k), (W, R)), ((W, H - R), (W - k, H - k), (W - R, H)),
+            ((R, H), (k, H - k), (0, H - R)), ((0, R), (k, k), (R, 0))]
+    for (a, b, c, e) in lines:
+        sh = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_SEGMENT)
+        sh.SetStart(P(a, b))
+        sh.SetEnd(P(c, e))
+        sh.SetLayer(pcbnew.Edge_Cuts)
+        sh.SetWidth(width)
+        board.Add(sh)
+    for (st, mid, en) in arcs:
+        sh = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_ARC)
+        sh.SetArcGeometry(P(*st), P(*mid), P(*en))
+        sh.SetLayer(pcbnew.Edge_Cuts)
+        sh.SetWidth(width)
+        board.Add(sh)
 
     m = 0.3
     gx = FINGER_X + 0.5                       # -15 V keeps 0.5 mm off the finger
+    f = FRAME + 0.5                           # rails keep 0.5 mm off the GND frame
     shapes = {
         ("GND", "In1.Cu"): [(m, m), (W - m, m), (W - m, H - m), (m, H - m)],
         ("GND", "B.Cu"): [(m, m), (W - m, m), (W - m, H - m), (m, H - m)],
-        ("+15V", "In2.Cu"): [(m, m), (W - m, m), (W - m, SPLIT_TOP),
-                             (FINGER_X, SPLIT_TOP), (FINGER_X, H - m), (m, H - m)],
-        ("-15V", "In2.Cu"): [(gx, SPLIT_BOT), (W - m, SPLIT_BOT), (W - m, H - m),
-                             (gx, H - m)],
+        ("+15V", "In2.Cu"): [(f, f), (W - f, f), (W - f, SPLIT_TOP),
+                             (FINGER_X, SPLIT_TOP), (FINGER_X, FINGER_Y), (f, FINGER_Y)],
+        ("-15V", "In2.Cu"): [(gx, SPLIT_BOT), (W - f, SPLIT_BOT), (W - f, H - f),
+                             (f, H - f), (f, FINGER_Y + 0.5), (gx, FINGER_Y + 0.5)],
     }
+    frame_outer = [(m, m), (W - m, m), (W - m, H - m), (m, H - m)]
+    frame_hole = [(FRAME, FRAME), (W - FRAME, FRAME), (W - FRAME, H - FRAME), (FRAME, H - FRAME)]
+    have_frame = False
+    for z in board.Zones():
+        if z.GetIsRuleArea():
+            continue
+        if z.GetNetname() == "GND" and board.GetLayerName(z.GetFirstLayer()) == "In2.Cu":
+            have_frame = True
+            frame = z
+    if not have_frame:
+        tmpl = [z for z in board.Zones() if z.GetNetname() == "+15V"][0]
+        frame = pcbnew.ZONE(board)
+        frame.SetLayer(pcbnew.In2_Cu)
+        frame.SetNet(board.FindNet("GND"))
+        frame.SetLocalClearance(tmpl.GetLocalClearance())
+        frame.SetMinThickness(tmpl.GetMinThickness())
+        frame.SetPadConnection(tmpl.GetPadConnection())
+        frame.SetThermalReliefGap(tmpl.GetThermalReliefGap())
+        frame.SetThermalReliefSpokeWidth(tmpl.GetThermalReliefSpokeWidth())
+        board.Add(frame)
+    fpoly = frame.Outline()
+    fpoly.RemoveAllContours()
+    fpoly.NewOutline()
+    for (x, y) in frame_outer:
+        fpoly.Append(P(x, y).x, P(x, y).y)
+    hole = fpoly.NewHole()
+    for (x, y) in frame_hole:
+        fpoly.Append(P(x, y).x, P(x, y).y, 0, hole)
+    frame.UnFill()
     rects = shapes
     done = set()
     for z in board.Zones():
+        if z.GetIsRuleArea() or z.GetZoneName().startswith("thermal_"):
+            continue                          # keepouts / local copper: not planes
         key = (z.GetNetname(), board.GetLayerName(z.GetFirstLayer()))
+        if key == ("GND", "In2.Cu"):
+            continue                          # the edge frame, shaped above
         if key not in rects:
             raise SystemExit("unexpected pour %s" % (key,))
         poly = z.Outline()
@@ -535,6 +674,128 @@ def resize_outline_and_pours(board, x0, y0):
         done.add(key)
     if done != set(rects):
         raise SystemExit("pours missing: %s" % (set(rects) - done))
+    # explicit priorities on In2: the rails win over the GND frame where they
+    # meet (otherwise a UUID tie-break decides)
+    for z in board.Zones():
+        if not z.GetIsRuleArea() and board.GetLayerName(z.GetFirstLayer()) == "In2.Cu":
+            z.SetAssignedPriority(1 if z.GetNetname() in ("+15V", "-15V") else 0)
+    hole_keepouts(board, x0, y0)
+
+
+HOLE_KEEPOUT_D = 7.0       # mm: no copper near a metal screw / standoff
+
+
+def hole_keepouts(board, x0, y0):
+    """A round copper keepout (rule area, every copper layer) on each mounting
+    hole, so no rail copper sits 0.3 mm of resin away from an M3 screw.
+    Idempotent: existing keepouts are reshaped, never removed."""
+    have = {z.GetZoneName(): z for z in board.Zones() if z.GetIsRuleArea()}
+    for ref, (hx, hy, _r) in (("H1", PLAN["H1"]), ("H2", PLAN["H2"])):
+        name = "keepout_%s" % ref
+        z = have.get(name)
+        if z is None:
+            z = pcbnew.ZONE(board)
+            z.SetIsRuleArea(True)
+            z.SetZoneName(name)
+            board.Add(z)
+        ls = pcbnew.LSET()
+        for l in (pcbnew.F_Cu, pcbnew.In1_Cu, pcbnew.In2_Cu, pcbnew.B_Cu):
+            ls.AddLayer(l)
+        z.SetLayerSet(ls)
+        z.SetDoNotAllowZoneFills(True)
+        z.SetDoNotAllowTracks(True)
+        z.SetDoNotAllowVias(True)
+        z.SetDoNotAllowPads(False)
+        z.SetDoNotAllowFootprints(False)
+        poly = z.Outline()
+        poly.RemoveAllContours()
+        poly.NewOutline()
+        r = HOLE_KEEPOUT_D / 2
+        for k in range(24):
+            a = 2 * math.pi * k / 24
+            px = int(round((x0 + hx + r * math.cos(a)) * 1e6))
+            py = int(round((y0 + hy + r * math.sin(a)) * 1e6))
+            poly.Append(px, py)
+
+
+def _wanted():
+    want = {c[0]: tuple(c[7].split(":")) for c in sch.COMPONENTS}
+    want.update(BOARD_ONLY)
+    return want
+
+
+def strip_stale_footprints(path):
+    """Return the board text with every footprint removed whose part no longer
+    matches the schematic (or that is gone from it).  Done on the text, before
+    pcbnew loads the board: BOARD.Remove() corrupts pcbnew's SWIG type table
+    for the rest of the process.  The caller re-adds the parts via sync_parts."""
+    import re
+    src = open(path).read()
+    want = _wanted()
+    out, i, stripped = [], 0, []
+    while True:
+        k = src.find("\n\t(footprint ", i)
+        if k < 0:
+            out.append(src[i:])
+            break
+        depth, e = 0, k + 1
+        while True:
+            c = src[e]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            e += 1
+        blk = src[k:e + 1]
+        name = re.match(r'\n\t\(footprint "([^"]+)"', blk).group(1).split(":")[-1]
+        ref = re.search(r'\(property "Reference" "([^"]+)"', blk).group(1)
+        out.append(src[i:k])
+        if ref in want and name == want[ref][1]:
+            out.append(blk)
+        else:
+            stripped.append(ref)
+        i = e + 1
+    return "".join(out), stripped
+
+
+def _load_fp(lib, name):
+    """Load a library footprint through the KiCad s-expression plugin directly
+    (pcbnew.FootprintLoad's plugin lookup breaks once a board is loaded)."""
+    fp = pcbnew.FootprintLoad(os.path.join("/usr/share/kicad/footprints", lib + ".pretty"), name)
+    if fp is None:
+        raise SystemExit("cannot load %s:%s" % (lib, name))
+    return fp
+
+
+def _net(board, name):
+    ni = board.FindNet(name)
+    if ni is None:                         # a net new in the schematic
+        ni = pcbnew.NETINFO_ITEM(board, name)
+        board.Add(ni)
+    return ni
+
+
+def stamp_nets(board):
+    """Every pad gets the net the schematic table gives its pin (SOT-343 pad 4
+    follows pad 2).  Returns the pads whose net changed."""
+    changed = []
+    for f in board.GetFootprints():
+        ref = f.GetReference()
+        if ref in BOARD_ONLY:
+            continue
+        pins = {pin: net for (r, pin), net in sch.NET.items() if r == ref}
+        for pad in f.Pads():
+            net = pins.get(pad.GetNumber())
+            if net is None and pad.GetNumber() == "4" and "2" in pins:
+                net = pins["2"]
+            if net is None:
+                raise SystemExit("%s pad %s has no net" % (ref, pad.GetNumber()))
+            if pad.GetNetname() != net:
+                changed.append("%s.%s %s->%s" % (ref, pad.GetNumber(), pad.GetNetname(), net))
+                pad.SetNet(_net(board, net))
+    return changed
 
 
 def sync_parts(board):
@@ -542,35 +803,33 @@ def sync_parts(board):
     board-only parts (holes, fiducials): add what is missing with its nets,
     replace a footprint whose library part changed, drop what is gone.
     New parts start at the board origin; the placer moves them."""
-    want = {c[0]: tuple(c[7].split(":")) for c in sch.COMPONENTS}
-    want.update(BOARD_ONLY)
+    want = _wanted()
     have = {f.GetReference(): f for f in board.GetFootprints()}
+    stale = [r for r, f in have.items()
+             if r not in want or f.GetFPID().GetLibItemName().wx_str() != want[r][1]]
+    if stale:
+        raise SystemExit("stale footprints %s: strip them before loading" % stale)
+    loaded = {ref: _load_fp(*want[ref]) for ref in want if ref not in have}
+    eb = board.GetBoardEdgesBoundingBox()
+    ex, ey = eb.GetX(), eb.GetY()
     added, removed = [], []
-    for ref, f in have.items():
-        name = f.GetFPID().GetLibItemName().wx_str()
-        if ref not in want or name != want[ref][1]:
-            if f.IsLocked():
-                raise SystemExit("locked part %s differs from the schematic" % ref)
-            board.Remove(f)
-            removed.append(ref)
     # stamp the library link (gen_pcb.py left the nickname empty), so KiCad's
     # "update footprints from library" and its library checks can find them
     for f in board.GetFootprints():
         lib, name = want[f.GetReference()]
         f.SetFPID(pcbnew.LIB_ID(lib, name))
     have = {f.GetReference() for f in board.GetFootprints()}
-    eb = board.GetBoardEdgesBoundingBox()
     for ref, (lib, name) in sorted(want.items()):
         if ref in have:
             continue
-        fp = pcbnew.FootprintLoad(os.path.join("/usr/share/kicad/footprints", lib + ".pretty"), name)
+        fp = loaded[ref]
         if fp is None:
             raise SystemExit("cannot load %s:%s" % (lib, name))
         fp.SetReference(ref)
         fp.SetFPID(pcbnew.LIB_ID(lib, name))
         val = {c[0]: c[2] for c in sch.COMPONENTS}.get(ref, name.split("_")[0])
         fp.SetValue(val)
-        fp.SetPosition(pcbnew.VECTOR2I(eb.GetX() + pcbnew.FromMM(10), eb.GetY() + pcbnew.FromMM(10)))
+        fp.SetPosition(pcbnew.VECTOR2I(ex + pcbnew.FromMM(10), ey + pcbnew.FromMM(10)))
         board.Add(fp)
         pins = {pin: net for (r, pin), net in sch.NET.items() if r == ref}
         for pad in fp.Pads():
@@ -581,14 +840,25 @@ def sync_parts(board):
                 if ref in BOARD_ONLY:
                     continue
                 raise SystemExit("%s pad %s has no net" % (ref, pad.GetNumber()))
-            ni = board.FindNet(net)
-            if ni is None:
-                raise SystemExit("net %s is not on the board" % net)
-            pad.SetNet(ni)
+            pad.SetNet(_net(board, net))
         if ref in BOARD_ONLY:
             fp.Reference().SetVisible(False)
             fp.Value().SetVisible(False)
+        if ref == "J1":
+            x, y, rot = J1_PLACE
+            ox, oy = ex / 1e6 + 0.05, ey / 1e6 + 0.05
+            fp.SetOrientationDegrees(rot)
+            fp.SetPosition(pcbnew.VECTOR2I(int(round((ox + x) * 1e6)), int(round((oy + y) * 1e6))))
+            fp.SetLocked(True)
         added.append(ref)
+    # J1's position is owned by J1_PLACE (locked edge connector)
+    for f in board.GetFootprints():
+        if f.GetReference() == "J1":
+            x, y, rot = J1_PLACE
+            ox, oy = ex / 1e6 + 0.05, ey / 1e6 + 0.05
+            f.SetOrientationDegrees(rot)
+            f.SetPosition(pcbnew.VECTOR2I(int(round((ox + x) * 1e6)), int(round((oy + y) * 1e6))))
+            f.SetLocked(True)
     return added, removed
 
 
@@ -601,9 +871,10 @@ def board_id(board, x0, y0):
     t.SetText(BOARD_ID)
     t.SetLayer(pcbnew.B_SilkS)
     t.SetMirrored(True)
-    t.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(1.5), pcbnew.FromMM(1.5)))
-    t.SetTextThickness(pcbnew.FromMM(0.25))
-    t.SetPosition(pcbnew.VECTOR2I(int(round((x0 + W / 2) * 1e6)), int(round((y0 + H / 2) * 1e6))))
+    t.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(1.2), pcbnew.FromMM(1.2)))
+    t.SetTextThickness(pcbnew.FromMM(0.2))
+    # right of J1's plated pins (x < 9), clear of exposed copper on the back
+    t.SetPosition(pcbnew.VECTOR2I(int(round((x0 + 30.0) * 1e6)), int(round((y0 + H / 2) * 1e6))))
     board.Add(t)
 
 
@@ -617,7 +888,7 @@ def _hit(a, b):
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
 
-def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
+def _place_refs(board, size, thick, tries, seed, only=None, taken0=()):
     """Put every silkscreen reference in a spot that clears all pads, all
     silkscreen outlines, the other references and the board edge, and that is
     closer to its own part than to any other.  Greedy placement depends on the
@@ -632,12 +903,17 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
         for g in f.GraphicalItems():
             if g.GetLayer() == pcbnew.F_SilkS and g.GetClass() != "PCB_TEXT":
                 fixed_obs.append(_bb(g, 0.1))
-    parts = [f for f in board.GetFootprints() if f.GetReference() not in BOARD_ONLY]
-    yards = {}
+    parts = [f for f in board.GetFootprints() if f.GetReference() not in BOARD_ONLY
+             and (only is None or f.GetReference() in only)]
+    yards, bodies = {}, {}
     for f in board.GetFootprints():
         c = f.GetCourtyard(pcbnew.F_CrtYd).BBox()
         yards[f.GetReference()] = (c.GetLeft() / 1e6, c.GetTop() / 1e6,
                                    c.GetRight() / 1e6, c.GetBottom() / 1e6)
+        # what a reader associates a label with: the part's pads
+        pb = [_bb(p) for p in f.Pads()] or [yards[f.GetReference()]]
+        bodies[f.GetReference()] = (min(b[0] for b in pb), min(b[1] for b in pb),
+                                    max(b[2] for b in pb), max(b[3] for b in pb))
 
     def gap(box, yard):
         dx = max(yard[0] - box[2], box[0] - yard[2], 0.0)
@@ -645,8 +921,8 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
         return math.hypot(dx, dy)
 
     def ambiguity(ref, box):
-        own = gap(box, yards[ref])
-        other = min(gap(box, y) for k, y in yards.items()
+        own = gap(box, bodies[ref])
+        other = min(gap(box, y) for k, y in bodies.items()
                     if k != ref and k not in BOARD_ONLY)
         return max(0.0, own - other + 0.25) + 0.3 * own
 
@@ -660,10 +936,10 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
         x0, y0, x1, y1 = yards[f.GetReference()]
         cx, cyy = (x0 + x1) / 2, (y0 + y1) / 2
         pts = [(cx, cyy, 0), (cx, cyy, 90)]
-        for d in (0.6, 0.9, 1.3, 1.8, 2.4, 3.0):
-            for sx in (0.0, -0.75, 0.75, -1.5, 1.5):
+        for d in (0.6, 0.9, 1.3, 1.8, 2.4, 3.0, 3.6, 4.2):
+            for sx in (0.0, -0.75, 0.75, -1.5, 1.5, -2.25, 2.25):
                 pts += [(cx + sx, y0 - d, 0), (cx + sx, y1 + d, 0)]
-            for sy in (0.0, -0.75, 0.75, -1.5, 1.5):
+            for sy in (0.0, -0.75, 0.75, -1.5, 1.5, -2.25, 2.25):
                 pts += [(x0 - d - 0.6, cyy + sy, 0), (x1 + d + 0.6, cyy + sy, 0),
                         (x0 - d, cyy + sy, 90), (x1 + d, cyy + sy, 90)]
         lst = []
@@ -685,7 +961,7 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
     best = None
     for t in range(tries):
         order = base if t == 0 else rnd.sample(refs, len(refs))
-        taken, pick, score = [], {}, 0.0
+        taken, pick, score = list(taken0), {}, 0.0
         for ref in order:
             choice = None
             for c in cands[ref]:
@@ -700,7 +976,7 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
             score += choice[0]
         if best is None or score < best[0]:
             best = (score, pick)
-    failed = []
+    failed, boxes = [], []
     for f in parts:
         ref = f.GetReference()
         r = f.Reference()
@@ -712,7 +988,23 @@ def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
             failed.append(ref)
         r.SetTextAngleDegrees(c[3])
         r.SetPosition(pcbnew.VECTOR2I(int(round(c[1] * 1e6)), int(round(c[2] * 1e6))))
-    return failed
+        boxes.append(c[4])
+    return failed, boxes
+
+
+def place_refs(board, size=1.0, thick=0.15, tries=60, seed=1):
+    """1.0 mm references everywhere they fit; 0.8 mm for the few that do not
+    (crowded corners), placed around the 1.0 mm ones."""
+    failed, boxes = _place_refs(board, size, thick, tries, seed)
+    if not failed:
+        return []
+    keep = [b for b in boxes]
+    # drop the failed ones' boxes and retry them smaller
+    fp = {f.GetReference(): f for f in board.GetFootprints()}
+    fail_boxes = [_bb(fp[r].Reference(), 0.05) for r in failed]
+    keep = [b for b in keep if b not in fail_boxes]
+    still, _b = _place_refs(board, 0.8, 0.15, tries, seed, only=set(failed), taken0=keep)
+    return still
 
 
 def report(pl, label):
@@ -737,10 +1029,25 @@ def main():
                     help="cost per ratsnest crossing (doubled for high-Z nets)")
     a = ap.parse_args()
 
-    board = pcbnew.LoadBoard(BOARD)
+    src, stripped = strip_stale_footprints(BOARD)
+    if stripped and not a.dry_run:
+        tmp = os.path.join(ROOT, ".place_tmp_%d.kicad_pcb" % os.getpid())
+        open(tmp, "w").write(src)
+        # the project file must sit beside it, or pcbnew loads default rules
+        # and SaveBoard later writes those defaults over opamp.kicad_pro
+        import shutil
+        shutil.copy(os.path.join(ROOT, "opamp.kicad_pro"), tmp[:-10] + ".kicad_pro")
+        board = pcbnew.LoadBoard(tmp)
+        os.remove(tmp)
+        os.remove(tmp[:-10] + ".kicad_pro")
+        print("replacing stale footprints: %s" % stripped)
+    else:
+        board = pcbnew.LoadBoard(BOARD)
     if not a.dry_run:
         added, removed = sync_parts(board)
         print("parts added: %s   removed/replaced: %s" % (added or "none", removed or "none"))
+        changed = stamp_nets(board)
+        print("pad nets updated: %s" % (changed or "none"))
     pl = Placer(board)
     print("locked (kept in place): %s" % sorted(pl.locked))
     report(pl, "before (old outline)")
@@ -748,7 +1055,7 @@ def main():
         return
 
     resize_outline_and_pours(board, pl.x0, pl.y0)
-    for r in pl.locked:
+    for r in pl.locked - EDGE_PARTS:
         x0, y0, x1, y1 = pl.cbox(r)
         if x0 < EDGE or y0 < EDGE or x1 > W - EDGE or y1 > H - EDGE:
             raise SystemExit("locked part %s would sit outside the new outline" % r)
@@ -771,6 +1078,9 @@ def main():
         pl.cross_w = a.cross
         pl.wire_cost()
         wire, viol = pl.anneal(a.iters, a.seed, T0=3.0, step0=4.0, swaps=False, lam0=80.0)
+        if viol > 1e-9:
+            pl.legalize_local(seed=a.seed)
+            viol = pl.legal_violation()
     report(pl, "after (50 x 40 mm)")
     if viol > 1e-9:
         raise SystemExit("placement not legal (violation %.3f) - try another --seed" % viol)
@@ -788,3 +1098,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # pcbnew's SWIG destructors can crash at interpreter teardown; the board
+    # is already saved, so leave without running them
+    import sys
+    sys.stdout.flush()
+    os._exit(0)

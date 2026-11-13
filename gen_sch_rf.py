@@ -51,13 +51,17 @@ C1206 = "Capacitor_SMD:C_1206_3216Metric"
 CP = "Capacitor_SMD:CP_Elec_6.3x5.4"
 SOT23 = "Package_TO_SOT_SMD:SOT-23"
 SOT343 = "Package_TO_SOT_SMD:SOT-343_SC-70-4"
-HDR = "Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical_SMD_Pin1Left"
+# 6-way 3.5 mm screw terminal, horizontal wire entry (Phoenix PT 1,5/6-3,5-H
+# 1984662 or any generic 3.5 mm equivalent with the same pin row)
+TB6 = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_PT-1,5-6-3.5-H_1x06_P3.50mm_Horizontal"
 
 NPN = "Transistor_BJT:Q_NPN_BEC"
 PNP = "Transistor_BJT:Q_PNP_BEC"
 RES = "Device:R"
 CAP = "Device:C"
 CAPP = "Device:C_Polarized"
+TP = "Connector:TestPoint"
+TPAD = "TestPoint:TestPoint_Pad_D1.5mm"
 
 # Whole drawing is shifted by this many grid units to centre it on A3.
 X0, Y0 = 20, 14
@@ -85,7 +89,7 @@ def at(x, y):
 #   R, 90 deg           : pin 1 (-3, 0)  pin 2 (+3, 0)
 _PLACE = [
     # ---- lower band: I/O ----
-    ("J1", "Connector_Generic:Conn_01x06", "I/O", 28, 128, 0, "y", HDR),
+    ("J1", "Connector:Screw_Terminal_01x06", "Screw 6P 3.5", 28, 128, 0, "y", TB6),
 
     # ---- lower band: cascode bias dividers ----
     ("R4", RES, "6.8k", 72, 121, 0, None, R),
@@ -95,15 +99,29 @@ _PLACE = [
     ("R11", RES, "11k", 100, 131, 0, None, R),
     ("C5", CAP, "100n", 108, 129, 0, None, C),
     ("C10", CAP, "100n", 116, 129, 0, None, C),
+    ("C14", CAP, "100n", 124, 129, 0, None, C),
 
     # ---- lower band: supply decoupling ----
     # C1/C2 + C11/C12 sit at J1; C8/C9 sit at the output collectors (Q17/Q18)
-    ("C1", CAP, "100n", 138, 127, 0, None, C),
-    ("C11", CAP, "10u", 146, 127, 0, None, C1206),
-    ("C8", CAP, "100n", 154, 127, 0, None, C),
-    ("C2", CAP, "100n", 164, 127, 0, None, C),
-    ("C12", CAP, "10u", 172, 127, 0, None, C1206),
-    ("C9", CAP, "100n", 180, 127, 0, None, C),
+    ("C1", CAP, "100n", 144, 127, 0, None, C),
+    ("C11", CAP, "10u", 152, 127, 0, None, C1206),
+    ("C8", CAP, "100n", 160, 127, 0, None, C),
+    ("C2", CAP, "100n", 170, 127, 0, None, C),
+    ("C12", CAP, "10u", 178, 127, 0, None, C1206),
+    ("C9", CAP, "100n", 186, 127, 0, None, C),
+
+    # ---- lower band, second row: test points (probe pads) ----
+    ("TP1", TP, "TestPoint", 26, 159, 0, None, TPAD),
+    ("TP2", TP, "TestPoint", 38, 159, 0, None, TPAD),
+    ("TP3", TP, "TestPoint", 50, 159, 0, None, TPAD),
+    ("TP4", TP, "TestPoint", 62, 159, 0, None, TPAD),
+    ("TP5", TP, "TestPoint", 74, 159, 0, None, TPAD),
+    ("TP6", TP, "TestPoint", 86, 159, 0, None, TPAD),
+    ("TP7", TP, "TestPoint", 98, 159, 0, None, TPAD),
+
+    # ---- lower band, second row: on-board feedback (sets the 60 dB gain) ----
+    ("R24", RES, "10k", 128, 160, 90, None, R),
+    ("R25", RES, "10", 146, 163, 0, None, R),
 
     # ---- stage 1: mirror on top, cascodes, diff pair, tail at the bottom ----
     # left column (Q1 side) has its leads on x = 42, right column on x = 82
@@ -132,23 +150,28 @@ _PLACE = [
     ("Q13", NPN, "BFP420", 152, 68, 0, None, SOT343),
     ("R19", RES, "1k", 154, 51, 0, None, R1206),
     ("R20", RES, "50", 154, 75, 0, None, R),
+    ("C13", CAP, "100n", 147, 75, 0, None, C),
+    # base stoppers at the BFP420 follower bases (kill GHz parasitic oscillation)
+    ("R21", RES, "33", 116, 64, 90, None, R),
     ("C6", CAPP, "220u", 162, 75, 0, None, CP),
 
     # ---- output: cascoded follower, Vbe multiplier, class-AB pair ----
     ("Q15", NPN, "MMBT3904", 188, 46, 0, None, SOT23),
     ("Q14", NPN, "BFP420", 188, 58, 0, None, SOT343),
+    ("R22", RES, "33", 180, 58, 90, None, R),
+    ("R23", RES, "33", 227, 62, 90, None, R),
     ("R12", RES, "1.8k", 198, 67, 0, None, R),
     ("R13", RES, "1.2k", 198, 77, 0, None, R),
     ("Q19", NPN, "MMBT3904", 206, 72, 0, None, SOT23),
     ("C3", CAP, "100n", 222, 73, 0, None, C),
     ("R14", RES, "10k", 190, 87, 0, None, R),
-    ("Q17", NPN, "MMBT3904", 232, 50, 0, None, SOT23),
-    ("Q16", NPN, "BFP420", 232, 62, 0, None, SOT343),
-    ("R15", RES, "4.7", 234, 69, 0, None, R),
-    ("R16", RES, "4.7", 234, 77, 0, None, R),
-    ("Q18", PNP, "MMBTH81", 232, 84, 0, "x", SOT23),
-    ("R17", RES, "47", 244, 72, 90, None, R),
-    ("R7", RES, "10k", 254, 75, 0, None, R),
+    ("Q17", NPN, "MMBT3904", 238, 50, 0, None, SOT23),
+    ("Q16", NPN, "BFP420", 238, 62, 0, None, SOT343),
+    ("R15", RES, "4.7", 240, 69, 0, None, R),
+    ("R16", RES, "4.7", 240, 77, 0, None, R),
+    ("Q18", PNP, "MMBTH81", 238, 84, 0, "x", SOT23),
+    ("R17", RES, "47", 250, 72, 90, None, R),
+    ("R7", RES, "10k", 260, 75, 0, None, R),
 ]
 
 COMPONENTS = [(ref, lib, val) + at(x, y) + (ang, mir, fp)
@@ -156,8 +179,11 @@ COMPONENTS = [(ref, lib, val) + at(x, y) + (ang, mir, fp)
 _GRID = {c[0]: (c[3], c[4]) for c in _PLACE}
 
 NET = {
-    ("J1", "1"): "OUT", ("J1", "2"): "INP", ("J1", "3"): "INN",
-    ("J1", "4"): "GND", ("J1", "5"): "+15V", ("J1", "6"): "-15V",
+    # GND (pin 2) and INN (pin 3) sit between the non-inverting input and the
+    # output, so the terminal cannot couple OUT back into INP (positive
+    # feedback at 60 dB); OUT next to INN is negative feedback, harmless
+    ("J1", "1"): "INP", ("J1", "2"): "GND", ("J1", "3"): "INN",
+    ("J1", "4"): "OUT", ("J1", "5"): "+15V", ("J1", "6"): "-15V",
     # bias
     ("R1", "1"): "+15V", ("R1", "2"): "vref",
     ("Q9", "1"): "vref", ("Q9", "2"): "veb", ("Q9", "3"): "vref",
@@ -173,6 +199,7 @@ NET = {
     ("R11", "1"): "vcd", ("R11", "2"): "-15V",
     ("C5", "1"): "vcd", ("C5", "2"): "GND",
     ("C10", "1"): "vcd", ("C10", "2"): "GND",
+    ("C14", "1"): "vcd", ("C14", "2"): "GND",
     # stage 1
     ("Q1", "1"): "INN", ("Q1", "2"): "T", ("Q1", "3"): "a1",
     ("Q3", "1"): "vcn", ("Q3", "2"): "a1", ("Q3", "3"): "c1",
@@ -186,17 +213,21 @@ NET = {
     ("Q8", "1"): "n2", ("Q8", "2"): "+15V", ("Q8", "3"): "vcp",
     ("R6", "1"): "vcp", ("R6", "2"): "-15V",
     # buffer 1 + stage 2
-    ("Q11", "1"): "c2", ("Q11", "2"): "d1", ("Q11", "3"): "x8",
+    ("Q11", "1"): "c2b", ("Q11", "2"): "d1", ("Q11", "3"): "x8",
+    ("R21", "1"): "c2", ("R21", "2"): "c2b",
     ("Q12", "1"): "vcd", ("Q12", "2"): "x8", ("Q12", "3"): "+15V",
     ("Q13", "1"): "d1", ("Q13", "2"): "e1", ("Q13", "3"): "d2",
     ("R19", "1"): "+15V", ("R19", "2"): "d2",
     ("R20", "1"): "e1", ("R20", "2"): "GND",
     ("C6", "1"): "e1", ("C6", "2"): "GND",
+    ("C13", "1"): "e1", ("C13", "2"): "GND",
     ("C7", "1"): "d2", ("C7", "2"): "d1",
     # buffer 2 + output
-    ("Q14", "1"): "d2", ("Q14", "2"): "d3", ("Q14", "3"): "x9",
+    ("Q14", "1"): "d2b", ("Q14", "2"): "d3", ("Q14", "3"): "x9",
+    ("R22", "1"): "d2", ("R22", "2"): "d2b",
     ("Q15", "1"): "vcd", ("Q15", "2"): "x9", ("Q15", "3"): "+15V",
-    ("Q16", "1"): "d3", ("Q16", "2"): "n8", ("Q16", "3"): "xo",
+    ("Q16", "1"): "d3b", ("Q16", "2"): "n8", ("Q16", "3"): "xo",
+    ("R23", "1"): "d3", ("R23", "2"): "d3b",
     ("Q17", "1"): "vcd", ("Q17", "2"): "xo", ("Q17", "3"): "+15V",
     ("Q18", "1"): "b9", ("Q18", "2"): "n9", ("Q18", "3"): "-15V",
     ("Q19", "1"): "db", ("Q19", "2"): "b9", ("Q19", "3"): "d3",
@@ -215,6 +246,13 @@ NET = {
     ("C12", "1"): "-15V", ("C12", "2"): "GND",
     ("C8", "1"): "+15V", ("C8", "2"): "GND",
     ("C9", "1"): "-15V", ("C9", "2"): "GND",
+    # on-board feedback: gain = 1 + R24/R25 = 1001 (60 dB), taken from OUTA so
+    # R17 stays outside the loop and isolates the cable capacitance
+    ("R24", "1"): "OUTA", ("R24", "2"): "INN",
+    ("R25", "1"): "INN", ("R25", "2"): "GND",
+    # test points
+    ("TP1", "1"): "+15V", ("TP2", "1"): "-15V", ("TP3", "1"): "GND",
+    ("TP4", "1"): "vcn", ("TP5", "1"): "vcd", ("TP6", "1"): "OUTA", ("TP7", "1"): "OUT",
 }
 
 POWER_NETS = {"+15V": ("power:+15V", 0), "-15V": ("power:-15V", 180),
@@ -222,7 +260,7 @@ POWER_NETS = {"+15V": ("power:+15V", 0), "-15V": ("power:-15V", 180),
 
 # Nets allowed to be drawn in several pieces joined by same-name labels.
 # Everything else must be one continuous piece of wire.
-CROSS = {"INP", "INN", "OUT", "vcn", "vcd", "vcp"}
+CROSS = {"INP", "INN", "OUT", "OUTA", "vcn", "vcd", "vcp"}
 # Signal nodes that carry a name tag only, so the drawing can be read against
 # the README's topology description.  They must still be one drawn wire.
 NAMED = {"c2", "d1", "d2", "d3"}
@@ -340,8 +378,8 @@ def port(name, gx, gy, justify="left"):
 # listed here with the grid point the symbol moves to.
 PWR_AT = {
     ("Q8", "2"): (94, 26),      # helper emitter up to the stage-1 +15 V row
-    ("Q17", "3"): (234, 42),    # output cascode collector up to Q15's row
-    ("Q18", "3"): (234, 90),    # output PNP collector down to R14's row
+    ("Q17", "3"): (240, 42),    # output cascode collector up to Q15's row
+    ("Q18", "3"): (240, 90),    # output PNP collector down to R14's row
 }
 
 
@@ -366,7 +404,7 @@ def _build():
 
     # =================== lower band: cascode bias =====================
     for top, bot, caps, name in (("R4", "R9", ("C4",), "vcn"),
-                                 ("R10", "R11", ("C5", "C10"), "vcd")):
+                                 ("R10", "R11", ("C5", "C10", "C14"), "vcd")):
         x = _GRID[top][0]
         wire((top, "2"), (bot, "1"))
         end = _GRID[caps[-1]][0] + 6
@@ -375,8 +413,8 @@ def _build():
 
     # ===================== lower band: supply =========================
     # Each rail: symbol, a short bus, its caps hanging off it, a PWR_FLAG.
-    for net, caps, flag_x in (("+15V", ("C1", "C11", "C8"), 150),
-                              ("-15V", ("C2", "C12", "C9"), 176)):
+    for net, caps, flag_x in (("+15V", ("C1", "C11", "C8"), 156),
+                              ("-15V", ("C2", "C12", "C9"), 182)):
         x0 = _GRID[caps[0]][0]
         _power(net, pt(x0, 117), ang=0)        # both arrows up: rails on top
         wire((x0, 117), (caps[0], "1"))
@@ -385,9 +423,9 @@ def _build():
             wire((_GRID[c][0], 121), (c, "1"))
         POWER.append(("#FLG%02d" % (len(POWER) + 1), "power:PWR_FLAG", "PWR_FLAG")
                      + pt(flag_x, 121) + (0,))
-    wire(("C9", "2"), (186, 130))
+    wire(("C9", "2"), (192, 130))
     POWER.append(("#FLG%02d" % (len(POWER) + 1), "power:PWR_FLAG", "PWR_FLAG")
-                 + pt(186, 130) + (0,))
+                 + pt(192, 130) + (0,))
 
     # ========================== stage 1 ===============================
     # PNP mirror: Q4/Q5 (reference side) and Q6/Q7 (output side)
@@ -418,7 +456,8 @@ def _build():
     wire(("Q9", "3"), (88, 82), (88, 86))              # Q9 diode strap
 
     # ===================== stage 1 -> stage 2: c2 =====================
-    wire((82, 64), ("Q11", "1"))
+    wire((82, 64), ("R21", "1"))
+    wire(("R21", "2"), ("Q11", "1"))
     label("c2", 100, 64)
 
     # ========================== stage 2 ===============================
@@ -428,11 +467,13 @@ def _build():
     wire(("R19", "2"), ("Q13", "3"))                   # d2 column
     wire(("C7", "1"), (154, 62))                       # Miller cap top -> d2
     wire(("Q13", "2"), ("C6", "1"))                    # e1 -> bypass cap
+    wire(("C13", "1"), ("Q13", "2"))                   # ceramic in parallel
     wire(("Q12", "1"), (118, 52))
     label("vcd", 118, 52, "right")
 
     # ===================== stage 2 -> output: d2 ======================
-    wire((154, 58), ("Q14", "1"))
+    wire((154, 58), ("R22", "1"))
+    wire(("R22", "2"), ("Q14", "1"))
     label("d2", 164, 58)
 
     # ========================== output ================================
@@ -440,10 +481,11 @@ def _build():
     wire(("Q17", "2"), ("Q16", "3"))                   # xo
     wire(("Q15", "1"), (182, 46))
     label("vcd", 182, 46, "right")
-    wire(("Q17", "1"), (222, 50))
-    label("vcd", 222, 50, "right")
+    wire(("Q17", "1"), (226, 50))
+    label("vcd", 226, 50, "right")
     # d3: one horizontal from Q14's emitter to Q16's base, with three drops
-    wire(("Q14", "2"), ("Q16", "1"))
+    wire(("Q14", "2"), ("R23", "1"))
+    wire(("R23", "2"), ("Q16", "1"))
     label("d3", 192, 62)
     wire((198, 62), ("R12", "1"))
     wire((208, 62), ("Q19", "3"))
@@ -458,13 +500,33 @@ def _build():
     wire(("C3", "2"), (222, 84))
     # emitter resistors meet at OUTA, then R17 and the load to OUT
     wire(("R15", "2"), ("R16", "1"))
-    wire((234, 72), ("R17", "1"))
-    wire(("R17", "2"), ("R7", "1"), (260, 72))
-    port("OUT", 260, 72)
+    wire((240, 72), ("R17", "1"))
+    label("OUTA", 243, 72)
+    wire(("R17", "2"), ("R7", "1"), (266, 72))
+    port("OUT", 266, 72)
+
+    # ======================= lower band: test points ===================
+    for ref in ("TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7"):
+        x, y = _GRID[ref]
+        net = NET[(ref, "1")]
+        wire((ref, "1"), (x, y + 4))
+        if net in ("+15V", "-15V", "GND", "OUT"):
+            port(net, x, y + 4)
+        else:
+            label(net, x, y + 4)
+
+    # ======================= lower band: feedback ======================
+    # OUTA -> R24 -> INN node -> R25 -> GND, drawn left to right
+    wire((122, 160), ("R24", "1"))
+    label("OUTA", 122, 160, "right")
+    wire(("R24", "2"), (146, 160))
+    wire((146, 160), ("R25", "1"))
+    wire((140, 160), (140, 156))
+    port("INN", 140, 156)
 
     # ---- rail symbols on every rail pin except the connector ----
     for (ref, pnum), net in NET.items():
-        if net not in POWER_NETS or ref == "J1":
+        if net not in POWER_NETS or ref == "J1" or ref.startswith("TP"):
             continue
         if (ref, pnum) in PWR_AT:
             dest = pt(*PWR_AT[(ref, pnum)])
@@ -639,7 +701,7 @@ for c in COMPONENTS:
         m, maker, lcsc = MPN[val]
         SIM_FIELDS.setdefault(ref, []).extend(
             [("MPN", m), ("Manufacturer", maker), ("LCSC", lcsc)])
-NO_SIM = {"J1"}
+NO_SIM = {"J1", "TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7"}   # no SPICE model
 
 
 # ---- blocks, titles and notes ----------------------------------------------
@@ -647,14 +709,16 @@ NO_SIM = {"J1"}
 BLOCKS = [
     ("STAGE 1", "differential input, cascoded PNP mirror load", 18, 13, 108, 104),
     ("STAGE 2", "buffer + Miller-compensated gain", 112, 13, 172, 104),
-    ("OUTPUT", "buffer, Vbe multiplier, class-AB push-pull", 176, 13, 268, 104),
+    ("OUTPUT", "buffer, Vbe multiplier, class-AB push-pull", 176, 13, 276, 104),
     ("I/O", "", 18, 110, 58, 146),
-    ("CASCODE BIAS", "", 62, 110, 128, 146),
-    ("SUPPLY", "decoupling + ERC flags", 132, 110, 192, 146),
+    ("CASCODE BIAS", "", 62, 110, 134, 146),
+    ("SUPPLY", "decoupling + ERC flags", 136, 110, 198, 146),
+    ("TEST POINTS", "1.5 mm probe pads", 18, 150, 112, 170),
+    ("FEEDBACK", "gain 1 + R24/R25 = 60 dB", 116, 150, 166, 170),
 ]
 
 TITLE_SIZE = 2.0
-NOTE_X, NOTE_Y = 198, 114
+NOTE_X, NOTE_Y = 204, 114
 NOTES = [
     "NOTES",
     "1. Signal path: INP/INN  ->  Q1/Q2 diff pair  ->  Q11 buffer  ->  Q13 CE gain",
@@ -662,14 +726,16 @@ NOTES = [
     "2. C7 68p (Miller, Q13 base to collector) sets the dominant pole: 11.5 MHz at 60 dB.",
     "3. BFP420 (VCEO 4.5 V) is cascoded wherever it would see more than ~4 V:",
     "    Q3 over Q1, Q12 over Q11, Q15 over Q14, Q17 over Q16.",
-    "4. Gain is set externally: non-inverting, Rf 10k / Rg 10R = 60 dB.",
-    "    Keep the feedback network low impedance.",
+    "4. Gain is set on the board: R24 10k from OUTA (before R17) to INN, R25 10R",
+    "    to GND = 60 dB. R17 stays outside the loop, isolating cable capacitance.",
     "5. Q19 / R12 / R13 Vbe multiplier sets the output-pair bias; R15/R16 degenerate it.",
     "6. R19 is 1206 (156 mW).  R7 10k is the on-board load.",
     "7. BFP420 is SOT-343: pad 4 is a second emitter, tie it to pad 2.",
     "8. LCSC: BFP420 C412737, MMBTH81 C190349, MMBT3904 C20526.",
-    "9. Place C8/C9 at the Q17/Q18 collectors, C10 at Q12's base, C4 at Q3's base,",
-    "    C5 at Q15/Q17's bases; C11/C12 (10u, 25 V min) at J1.",
+    "9. Place C8/C9 at the Q17/Q18 collectors, C10 at Q12's base, C14 at Q15's base,",
+    "    C5 at Q17's base, C4 at Q3's base, C13 at Q13's emitter; C11/C12 10u 25 V.",
+    "10. R21-R23 33R base stoppers sit right at the Q11/Q14/Q16 base pads.",
+    "11. J1 pinout: 1 INP, 2 GND, 3 INN, 4 OUT, 5 +15V, 6 -15V (GND guards INP).",
 ]
 
 # small italic annotations naming sub-circuits: (text, grid x, grid y)
@@ -690,7 +756,7 @@ def _texts():
         tx, ty = at(x1 + 1.5, y1 + 3)
         t.append((title, tx, ty, TITLE_SIZE, "bold"))
         if sub:
-            t.append((sub, round(tx + mm(len(title) * 1.25 + 2), 2), ty, 1.27, "italic"))
+            t.append((sub, round(tx + mm(len(title) * 1.45 + 2), 2), ty, 1.27, "italic"))
     for i, line in enumerate(NOTES):
         x, y = at(NOTE_X, NOTE_Y + i * 2.5 + (1 if i else 0))
         if i == 0:
@@ -713,7 +779,8 @@ CH = 0.87          # average glyph advance at 1.27 mm, in grid units
 def _side(ref):
     """Which side of the part its text goes on."""
     left = {"R5", "Q4", "Q5", "Q10", "R4", "R9", "R10", "R11",
-            "R12", "R13", "R20", "J1", "C1", "C11", "C8", "C2", "C12", "C9"}
+            "R12", "R13", "J1", "C1", "C11", "C8", "C2", "C12", "C9", "C13",
+            "R15", "R16"}
     return "left" if ref in left else "right"
 
 
@@ -743,6 +810,12 @@ def _text_pos():
         side = _side(ref)
         d = _clearance(lib, ang, mir)
         dy = 1.0
+        if lib == TP:
+            # probe pad: reference above-right of the ring, value hidden by
+            # making it the same text (the net is named by the label below)
+            tp[(ref, "Reference")] = at(x + 2.0 + len(ref) * CH / 2, y - 3)
+            tp[(ref, "Value")] = at(x + 2.0 + len("TestPoint") * CH / 2, y - 1.4)
+            continue
         if lib.startswith("Connector"):
             y = y + 1          # centre on the pin column
         for name, txt, oy in (("Reference", ref, -dy), ("Value", val, dy)):

@@ -78,7 +78,9 @@ def main():
         "min_silk_clearance": 0.10,
         "min_through_hole_diameter": 0.30,
         "min_track_width": 0.20,
-        "min_via_annular_width": 0.20,
+        # 0.6 mm via on a 0.3 mm drill = 0.15 mm ring (standard low-cost
+        # 4-layer capability); 0.20 here contradicted the Default via preset
+        "min_via_annular_width": 0.15,
         "min_via_diameter": 0.60,
     })
     ds["track_widths"] = [{"width": w} for w in TRACK_WIDTHS]

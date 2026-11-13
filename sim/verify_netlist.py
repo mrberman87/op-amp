@@ -59,7 +59,7 @@ def _named(netlist, name):
     return None
 
 
-def run(path):
+def run(path, cl=None):
     netlist = open(path).read()
     top = _find_top(netlist)
     inp = _named(netlist, "INP")
@@ -69,8 +69,15 @@ def run(path):
                          "(found %r, %r) - the input pair is not labelled" % (inp, inn))
     body = "\n".join(l for l in netlist.splitlines()
                      if not l.strip().startswith(".ac"))
-    deck = body + "\nVCC +15V 0 DC 15\nVEE -15V 0 DC -15\n" \
-        "Rf %s %s 10k\nRg %s 0 10\nVSRC %s 0 DC 0 AC 1\n" % (top, inn, inn, inp) + \
+    # the board carries its own feedback (R24 OUTA->INN, R25 INN->GND); add a
+    # test network only when the netlist has none
+    has_fb = any(re.match(r"^R\S+\s+(\S+)\s+(\S+)\s+10k\s*$", l) and
+                 {top, inn} == set(l.split()[1:3]) for l in netlist.splitlines())
+    fb = "" if has_fb else "Rf %s %s 10k\nRg %s 0 10\n" % (top, inn, inn)
+    out = _named(netlist, "OUT") or "OUT"
+    load = "CL %s 0 %s\n" % (out, cl) if cl else ""
+    deck = body + "\nVCC +15V 0 DC 15\nVEE -15V 0 DC -15\n" + fb + load + \
+        "VSRC %s 0 DC 0 AC 1\n" % inp + \
         ".control\nop\nac dec 60 0.01 40gig\nwrdata @ac.dat v(%s)\n.endc\n.end\n" % top
 
     with tempfile.TemporaryDirectory() as d:
@@ -107,7 +114,7 @@ def run(path):
             f3 = 10 ** (math.log10(f[i]) + t * (math.log10(f[i + 1]) - math.log10(f[i])))
             break
     return {"gain_db": gain, "peak_db": peak, "f3db_hz": f3,
-            "gain_10meg_db": at(1e7), "feedback_node": top}
+            "gain_10meg_db": at(1e7), "feedback_node": top, "on_board_fb": has_fb}
 
 
 def main():
@@ -116,7 +123,8 @@ def main():
     else:
         path = "/dev/stdin"
     got = run(path)
-    print("  feedback taken from node %s" % got["feedback_node"])
+    print("  feedback taken from node %s (%s)" % (got["feedback_node"],
+          "on-board R24/R25" if got["on_board_fb"] else "test network added"))
     ok = True
     for key, want in TARGET.items():
         have = got[key]
@@ -132,6 +140,14 @@ def main():
             good = abs(have - want) <= TOL_DB
             print("  %-16s %10.2f dB    (want %.2f dB)   %s"
                   % (key, have, want, "ok" if good else "FAIL"))
+        ok = ok and good
+    # capacitive load on OUT: R17 must keep it outside the loop (no peaking)
+    for cl in ("100p", "1n"):
+        g = run(path, cl)
+        good = g["peak_db"] - g["gain_db"] <= 1.0
+        print("  load %-4s on OUT    peaking %.2f dB, f-3dB %.2f MHz   %s"
+              % (cl, g["peak_db"] - g["gain_db"], (g["f3db_hz"] or 0) / 1e6,
+                 "ok" if good else "FAIL"))
         ok = ok and good
     if not ok:
         raise SystemExit(1)

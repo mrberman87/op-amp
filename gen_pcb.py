@@ -45,7 +45,7 @@ STACKUP_TEXT = ("4 layer 1.6mm: F.Cu signal+components / In1.Cu GND / "
 
 HIGH_Z = {"c2", "d1", "d2", "d3", "a1", "n1", "n2", "vcp", "e3", "e4",
           "x8", "x9", "xo", "db", "b9", "n8", "n9", "e1", "Tc", "vet", "veb",
-          "vref", "T"}
+          "vref", "T", "c2b", "d2b", "d3b"}
 POWER = {"+15V", "-15V", "GND"}
 
 FOOT = {
@@ -57,6 +57,9 @@ FOOT = {
     "SOT343": ("Package_TO_SOT_SMD", "SOT-343_SC-70-4"),
     "HDR":    ("Connector_PinHeader_2.54mm",
                "PinHeader_1x06_P2.54mm_Vertical_SMD_Pin1Left"),
+    "TB6":    ("TerminalBlock_Phoenix",
+               "TerminalBlock_Phoenix_PT-1,5-6-3.5-H_1x06_P3.50mm_Horizontal"),
+    "C1206":  ("Capacitor_SMD", "C_1206_3216Metric"),
 }
 
 # courtyard extents (w x h at rotation 0), measured from the installed libraries
@@ -68,6 +71,8 @@ COURTYARD = {
     "C":      (2.96, 1.46),
     "CP":     (9.60, 7.10),
     "HDR":    (6.82, 16.24),
+    "TB6":    (22.05, 8.65),
+    "C1206":  (4.66, 2.36),
 }
 
 FOOT_OF = {c[0]: c[7] for c in sch.COMPONENTS}

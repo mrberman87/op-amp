@@ -98,6 +98,11 @@ Sweeping it gives the trade-off:
 The MMBTH81 mirror/cascode/helper/output-PNP sees ≤ 15.8 V, inside its 20 V
 rating.
 
+The three BFP420 emitter followers (Q11, Q14, Q16) each have a 33 Ω base
+stopper (R21, R22, R23) right at the base pad: a 25 GHz follower with an
+inductive base lead and a capacitive emitter load is a GHz oscillator waiting
+to happen. The stoppers move the closed-loop response by < 0.1 %.
+
 ### Reference designators
 
 | Ref | Role | Part |
@@ -146,19 +151,33 @@ rating.
 | C4, C5 | cascode-bias bypass 100n | 0603 |
 | C6 | stage-2 emitter bypass 220 µF | 6.3×5.4 mm |
 | C7 | Miller compensation 68 pF | 0603 |
-| J1 | I/O header | 1×6, 2.54 mm |
+| C13 | stage-2 emitter HF bypass (at Q13) 100n | 0603 |
+| C14 | vcd bypass at Q15's base 100n | 0603 |
+| R21, R22, R23 | base stoppers (Q11, Q14, Q16) 33 | 0603 |
+| **R24** | **feedback 10k, OUTA → INN** | 0603 |
+| **R25** | **gain-setting 10, INN → GND** | 0603 |
+| TP1–TP7 | test pads: +15V, −15V, GND, vcn, vcd, OUTA, OUT | Ø1.5 mm SMD |
+| J1 | 6-way screw terminal, 3.5 mm (Phoenix PT 1,5/6-3,5-H 1984662 or equivalent): 1 INP, 2 GND, 3 INN, 4 OUT, 5 +15V, 6 −15V | THT |
+
+**The 60 dB gain is set on the board** by R24/R25 (1 + 10k/10 = 1001), taken
+from OUTA — before the 47 Ω R17 — exactly as simulated. R17 therefore stays
+outside the loop and isolates whatever capacitance hangs on OUT: the netlist
+check shows 0.04 dB of peaking with 100 pF on OUT and 0.23 dB with 1 nF. INN
+is still on J1 for trimming or paralleling a different gain. GND (pin 2) and
+INN (pin 3) sit between INP (pin 1) and OUT (pin 4), so the terminal cannot
+couple the output back into the non-inverting input.
 
 ---
 
 ## 4. Results (`sim/rf_two_stage.py`)
 
-Closed-loop non-inverting, `Rf = 10 kΩ`, `Rg = 10 Ω` (gain = 1001):
+Closed-loop non-inverting, `Rf = 10 kΩ`, `Rg = 10 Ω` (gain = 1001; on the board these are R24/R25):
 
 | Quantity | Value |
 |---|---|
 | Closed-loop gain | **59.91 dB** |
 | Peaking | **0 dB** |
-| f−3dB | **11.47 MHz** |
+| f−3dB | **11.46 MHz** (11.47 before the base stoppers) |
 | Gain at 10 MHz | **57.96 dB** |
 | Gain at 0.01 Hz | 59.42 dB |
 | Open-loop gain | ~110 dB |
@@ -195,16 +214,22 @@ collector (TODO 4.7).
 
 ## 5. Known limitations
 
-- **Input bias current ~21 µA.** At a 60 dB closed loop with `Rf = 10 kΩ`
+- **Input bias current ~21 µA.** At a 60 dB closed loop with `Rf = 10 kΩ` (R24)
   this gives ~0.2 V of output offset; the measured output DC is ~0.56 V
   (the ~0.5 mV input offset amplified by 1000). A trim or a servo would
   remove it. Keep the feedback network impedance low.
 - **Closed-loop 60 dB requires a low-impedance feedback network** (`Rf` in
   the low-kΩ range). A 1 MΩ feedback resistor would put 21 V across it.
-- The schematic is complete and verified. The **PCB is placed but not routed**:
-  4 layers (F.Cu signal+parts / In1.Cu GND / In2.Cu rails / B.Cu GND), 50 ×
-  40 mm, all 47 parts on the top side, nets generated from the same table
-  that draws the schematic. See TODO §2 for what is left.
+- The schematic and the **PCB are complete, routed and verified**: 4 layers
+  (F.Cu signal+parts / In1.Cu GND / In2.Cu rails inside a GND edge frame /
+  B.Cu GND), 50 × 40 mm with rounded corners, all 66 parts on the top side
+  plus 2 M3 holes and 3 fiducials, 577 track segments and 113 vias, KiCad DRC
+  0 violations / 0 unconnected under the project's net-class rules. Nets come
+  from the same table that draws the schematic. See TODO §2.
+- **Do not use KiCad's "Update PCB from Schematic".** The board is synced from
+  `gen_sch_rf.NET` by `place.py`; the schematic's auto-generated net names
+  (e.g. `Net-(Q1-C)`) differ from the board's (`a1`), and an update would
+  rename the nets and drop the Analog net-class patterns.
 
 ---
 
@@ -216,15 +241,19 @@ opamp/
 ├── gen_sch_rf.py            generator for the Rev-E schematic (source of truth)
 ├── gen_sch.py               shared symbol/wire emitter
 ├── opamp.kicad_sch          generated schematic, Rev E (A3)
-├── opamp.kicad_pcb          4-layer board, placed, unrouted
-├── gen_pcb.py               board generator (floorplan + pours + nets)
+├── opamp.kicad_pcb          4-layer board, placed and routed (edited in place)
+├── place.py                 sync parts/nets from NET, outline, pours, placement
+├── route.py                 router: signals, rail fanouts, stitching, R19 copper
+├── set_stackup.py           physical 4-layer stack-up -> board file
 ├── set_rules.py             design rules and net classes -> .kicad_pro
-├── verify_board.py          board gate (layer stack, nets, pad 4, DRC)
+├── verify_board.py          board gate (stack, nets, pad 4, pours, keepouts, DRC)
+├── gen_pcb.py               original board generator (superseded; do not re-run)
 ├── pcb_preview.py           placement PNG
-├── check.sh                 regenerate + ERC + netlist + sim gate
+├── check.sh                 regenerate + ERC + sims + rules + stack-up + board gate
 ├── sim/
 │   ├── rf_two_stage.py      Rev-E two-stage netlist + closed-loop test
-│   ├── stress_two.py        Vce / Pd check for Rev E
+│   ├── stress_two.py        Vce / Pd check for Rev E (every transistor and resistor)
+│   ├── verify_netlist.py    closed-loop + capacitive-load test on the schematic netlist
 │   ├── rf_lcsc.py           Rev-D single-stage netlist (models live here)
 │   └── …                    earlier experiments
 ├── analysis/  docs/  artifacts/  svg/
@@ -255,7 +284,7 @@ cd sim && python3 stress_two.py
 ```
 
 The exported netlist was verified to reproduce `sim/rf_two_stage.py`
-exactly: **59.91 dB, no peaking, 11.47 MHz**.
+exactly: **59.91 dB, no peaking, 11.46 MHz**.
 
 ---
 

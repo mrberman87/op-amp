@@ -71,13 +71,13 @@ def _ohms(tok):
 def stress(**kw):
     par = dict(r.DEFAULTS)
     par.update(kw)
-    deck = r.circuit(**kw) + '\nRf OUTA INN 10k\nRg INN 0 10\n'
+    deck = r.circuit(**kw) + '\nR24 OUTA INN 10k\nR25 INN 0 10\n'
     ic_list = " ".join("@%s[ic]" % d for d in VCE)
     out = r._run(deck, ".control\nop\n"
                  "print v(T) v(Tc) v(a1) v(c1) v(c2) v(n1) v(n2) v(vcp) v(vcn) v(vcd)\n"
                  "print v(d1) v(d2) v(d3) v(b9) v(x8) v(x9) v(xo) v(n8) v(n9) v(e1)\n"
                  "print v(e3) v(e4) v(vref) v(veb) v(vet) v(OUTA) v(OUT)\n"
-                 "print v(db) v(INP) v(INN)\n"
+                 "print v(db) v(INP) v(INN) v(c2b) v(d2b) v(d3b)\n"
                  "print %s\n.endc" % ic_list)
     vals = {"15": 15.0, "-15": -15.0, "0": 0.0, "gnd": 0.0}
     ics = {}

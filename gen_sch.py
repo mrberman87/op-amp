@@ -16,6 +16,7 @@ SYMLIB = {
     "Transistor_BJT": f"{LIBDIR}/Transistor_BJT.kicad_sym",
     "Transistor_FET": f"{LIBDIR}/Transistor_FET.kicad_sym",
     "Connector_Generic": f"{LIBDIR}/Connector_Generic.kicad_sym",
+    "Connector": f"{LIBDIR}/Connector.kicad_sym",
     "power": f"{LIBDIR}/power.kicad_sym",
 }
 
@@ -33,6 +34,11 @@ PINS = {
     "Transistor_BJT:Q_PNP_BEC": {"1": (-5.08, 0), "2": (2.54, -5.08), "3": (2.54, 5.08)},
     "Device:Q_NJFET_DSG": {"1": (2.54, 5.08), "2": (2.54, -5.08), "3": (-5.08, 0)},
     "Connector_Generic:Conn_01x06": {
+        "1": (-5.08, 5.08), "2": (-5.08, 2.54), "3": (-5.08, 0),
+        "4": (-5.08, -2.54), "5": (-5.08, -5.08), "6": (-5.08, -7.62)},
+    "Connector:TestPoint": {"1": (0, 0)},
+    # same pin geometry as Conn_01x06, drawn as a screw terminal
+    "Connector:Screw_Terminal_01x06": {
         "1": (-5.08, 5.08), "2": (-5.08, 2.54), "3": (-5.08, 0),
         "4": (-5.08, -2.54), "5": (-5.08, -5.08), "6": (-5.08, -7.62)},
     "power:+15V": {"1": (0, 0)},
@@ -536,6 +542,8 @@ def emit():
                       ("Device", "R_Potentiometer"), ("Device", "Q_NJFET_DSG"),
                       ("Transistor_BJT", "Q_NPN_BEC"), ("Transistor_BJT", "Q_PNP_BEC"),
                       ("Connector_Generic", "Conn_01x06"),
+                      ("Connector", "Screw_Terminal_01x06"),
+                      ("Connector", "TestPoint"),
                       ("power", "+15V"), ("power", "-15V"), ("power", "GND"),
                       ("power", "PWR_FLAG")]:
         if (lib, name) in seen:
