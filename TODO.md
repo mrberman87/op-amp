@@ -34,8 +34,13 @@ Started: 4-layer board generated from the schematic table, all parts on top.
 on it. `set_rules.py` writes the rules; `verify_board.py` gates (inside `./check.sh`).
 
 **Done**
-- [x] **2.1 Stackup.** 4 copper, 1.6 mm: F.Cu signal+parts / In1.Cu solid GND /
-      In2.Cu +15 V and −15 V pours / B.Cu GND. Order as JLC0004-100L.
+- [x] **2.1 Stackup** (`set_stackup.py`, written into the board file). 4 copper,
+      1.606 mm: F.Cu 1 oz signal+parts / 0.21 mm 7628 / In1.Cu ½ oz solid GND /
+      1.065 mm core / In2.Cu ½ oz +15 V and −15 V pours / 0.21 mm 7628 /
+      B.Cu 1 oz GND. In1/In2 typed as power planes. Matches the common default
+      4-layer build (e.g. JLC04161H-7628) — confirm dielectric thicknesses with
+      the fab. Every F.Cu trace references the unbroken In1 GND; the In2 split
+      is referenced to B.Cu GND, so it never sits under a signal.
 - [x] **2.2 Outline.** 50 × 40 mm. Courtyards ≥ 1 mm inside the edge; a
       courtyard-free strip along the bottom (y > 37.2 mm) and left (x < 2.2 mm)
       edges is reserved for the OUT trace back to J1 pin 1.

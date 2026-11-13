@@ -32,6 +32,7 @@ echo "== board: rules, verify =="
 # 50 x 40 mm placement), so it is NOT regenerated here: gen_pcb.py would
 # rebuild the old outline and discard both.  Re-place with: python3 place.py
 python3 set_rules.py >/dev/null
+python3 set_stackup.py >/dev/null
 python3 verify_board.py
 
 echo "OK"
