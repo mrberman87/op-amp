@@ -35,3 +35,6 @@ sim/*.txt
 sim/*.dat
 sim/*.png
 sim/*.log
+
+# Third-party tools (KiCad MCP server clone)
+tools/

@@ -26,6 +26,8 @@ SYMLIB = {
 PINS = {
     "Device:R": {"1": (0, 3.81), "2": (0, -3.81)},
     "Device:C": {"1": (0, 3.81), "2": (0, -3.81)},
+    # same pin geometry as C, but draws the curved plate and a "+" by pin 1
+    "Device:C_Polarized": {"1": (0, 3.81), "2": (0, -3.81)},
     "Device:R_Potentiometer": {"1": (0, 3.81), "2": (3.81, 0), "3": (0, -3.81)},
     "Transistor_BJT:Q_NPN_BEC": {"1": (-5.08, 0), "2": (2.54, -5.08), "3": (2.54, 5.08)},
     "Transistor_BJT:Q_PNP_BEC": {"1": (-5.08, 0), "2": (2.54, -5.08), "3": (2.54, 5.08)},
@@ -333,6 +335,10 @@ JUNCTIONS = [
 ]
 
 # labels: (text, x, y, justify) - terminals only; internal nets are drawn
+# global labels: (text, x, y, justify, shape) — same net as a power symbol of that name
+GLOBALS = []
+# optional hand-placed Reference/Value positions: (ref, "Reference"|"Value") -> (x, y)
+TEXT_POS = {}
 LABELS = [
     ("OUT", 49.53, 34.29, "left"),
     ("IN+", 49.53, 29.21, "left"),
@@ -363,18 +369,23 @@ XOFS = 0
 
 
 def apply_xofs():
-    global COMPONENTS, POWER, WIRES, JUNCTIONS, LABELS
+    global COMPONENTS, POWER, WIRES, JUNCTIONS, LABELS, GLOBALS, TEXT_POS
     COMPONENTS = [c[:3] + (c[3] + XOFS,) + c[4:] for c in COMPONENTS]
     POWER = [c[:3] + (c[3] + XOFS,) + c[4:] for c in POWER]
     WIRES = [((a[0] + XOFS, a[1]), (b[0] + XOFS, b[1])) for (a, b) in WIRES]
     JUNCTIONS = [(x + XOFS, y) for (x, y) in JUNCTIONS]
     LABELS = [(t, x + XOFS, y, j) for (t, x, y, j) in LABELS]
+    GLOBALS = [(t, x + XOFS, y, j, s) for (t, x, y, j, s) in GLOBALS]
+    TEXT_POS = {k: (x + XOFS, y) for k, (x, y) in TEXT_POS.items()}
 
 
 # ----------------------------------------------------------------------------
 # automatic Reference/Value text placement (keeps text off wires and bodies)
 # ----------------------------------------------------------------------------
 FS = 1.27
+# drawable bounds used by the automatic text placer (A4 by default; the
+# Rev-D generator raises these to A3 before calling emit()).
+SHEET_W, SHEET_H = 286, 199
 
 
 def tbox(t, x, y, just="center", bottom=False):
@@ -400,6 +411,11 @@ def ov(a, b):
 def body_box(lib, x, y, ang):
     if lib == "Device:R_Potentiometer":
         return (x - 3.0, y - 3.9, x + 3.0, y + 3.9)
+    if lib == "Device:C_Polarized":
+        # + marker sits above pin 1, so reserve a little more room on top
+        if ang in (90, 270):
+            return (x - 3.81, y - 2.5, x + 3.81, y + 2.5)
+        return (x - 2.5, y - 3.81, x + 2.5, y + 3.81)
     if lib.startswith("power:"):
         return (x - 4.5, y - 4.5, x + 4.5, y + 4.5)
     if lib.startswith("Transistor"):
@@ -424,7 +440,9 @@ def place_texts():
         occ.append(tbox(val, x, y))
     for (t, x, y, j) in LABELS:
         occ.append(tbox(t, x, y, j, bottom=True))
-    for (t, x, y) in TEXTS:
+    for (t, x, y, j, _shape) in GLOBALS:
+        occ.append(tbox(t, x, y, j, bottom=True))
+    for (t, x, y) in (tx[:3] for tx in TEXTS):
         occ.append(tbox(t, x, y, "left", bottom=True))
 
     cands = [(0, -2.54), (0, 2.54), (2.54, 0), (-2.54, 0),
@@ -446,10 +464,15 @@ def place_texts():
         ref, lib, val, x, y, ang = c[:6]
         for name, txt, tx, ty in (("Reference", ref, x, y - 5.08),
                                   ("Value", val, x, y + 5.08)):
+            if (ref, name) in TEXT_POS:
+                tx, ty = TEXT_POS[(ref, name)][:2]
+                occ.append(tbox(txt, tx, ty))
+                out[(ref, name)] = TEXT_POS[(ref, name)]
+                continue
             best = None
             for dx, dy in [(0, 0)] + cands:
                 b = tbox(txt, tx + dx, ty + dy)
-                if b[0] < 11 or b[2] > 286 or b[1] < 11 or b[3] > 199:
+                if b[0] < 11 or b[2] > SHEET_W or b[1] < 11 or b[3] > SHEET_H:
                     continue
                 if any(ov(b, o) for o in occ):
                     continue
@@ -466,9 +489,28 @@ def place_texts():
     return out, moved
 
 
+# optional dashed block boxes: (x1, y1, x2, y2)
+RECTS = []
+
+
+# symbols whose pin numbers are hidden on the sheet (e.g. transistors, where
+# "1 2 3" beside every lead is noise for a reader)
+HIDE_PIN_NUMBERS = set()
+
+# where the library draws a power symbol's value, in symbol units (y up)
+POWER_VALUE_Y = {"power:+15V": 3.556, "power:-15V": 3.556,
+                 "power:GND": -3.81, "power:PWR_FLAG": 3.81}
+
+
 def sym_block(lib, name):
     b = extract_symbol(lib, name)
+    if name in HIDE_PIN_NUMBERS and "(pin_numbers" not in b.split("(property", 1)[0]:
+        b = b.replace("(pin_names", "(pin_numbers\n\t\t\t(hide yes)\n\t\t)\n\t\t(pin_names", 1)
     return b.replace("(symbol \"%s\"" % name, "(symbol \"%s:%s\"" % (lib, name), 1)
+
+
+def _lang(justify):
+    return 180 if justify == "right" else 0
 
 
 def emit():
@@ -490,7 +532,7 @@ def emit():
     # lib_symbols
     out.append("\t(lib_symbols")
     seen = set()
-    for lib, name in [("Device", "R"), ("Device", "C"),
+    for lib, name in [("Device", "R"), ("Device", "C"), ("Device", "C_Polarized"),
                       ("Device", "R_Potentiometer"), ("Device", "Q_NJFET_DSG"),
                       ("Transistor_BJT", "Q_NPN_BEC"), ("Transistor_BJT", "Q_PNP_BEC"),
                       ("Connector_Generic", "Conn_01x06"),
@@ -506,17 +548,28 @@ def emit():
     for (x, y) in JUNCTIONS:
         out.append("\t(junction (at %s %s) (diameter 0) (color 0 0 0 0)\n\t\t(uuid \"%s\")\n\t)" % (x, y, u()))
 
+    # dashed block boxes
+    for (x1, y1, x2, y2) in RECTS:
+        out.append("\t(rectangle\n\t\t(start %s %s)\n\t\t(end %s %s)\n\t\t(stroke\n\t\t\t(width 0.2)\n\t\t\t(type dash)\n\t\t)\n\t\t(fill\n\t\t\t(type none)\n\t\t)\n\t\t(uuid \"%s\")\n\t)" % (x1, y1, x2, y2, u()))
+
     # wires
     for (a, b) in WIRES:
         out.append("\t(wire\n\t\t(pts\n\t\t\t(xy %s %s) (xy %s %s)\n\t\t)\n\t\t(stroke\n\t\t\t(width 0)\n\t\t\t(type default)\n\t\t)\n\t\t(uuid \"%s\")\n\t)" % (a[0], a[1], b[0], b[1], u()))
 
     # labels
     for (t, x, y, j) in LABELS:
-        out.append('\t(label "%s"\n\t\t(at %s %s 0)\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size 1.27 1.27)\n\t\t\t)\n\t\t\t(justify %s bottom)\n\t\t)\n\t\t(uuid "%s")\n\t)' % (t, x, y, j, u()))
+        out.append('\t(label "%s"\n\t\t(at %s %s %s)\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size 1.27 1.27)\n\t\t\t)\n\t\t\t(justify %s bottom)\n\t\t)\n\t\t(uuid "%s")\n\t)' % (t, x, y, _lang(j), j, u()))
+
+    # global labels (connect to power symbols of the same name)
+    for (t, x, y, j, shape) in GLOBALS:
+        out.append('\t(global_label "%s"\n\t\t(shape %s)\n\t\t(at %s %s %s)\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size 1.27 1.27)\n\t\t\t)\n\t\t\t(justify %s bottom)\n\t\t)\n\t\t(uuid "%s")\n\t\t(property "Intersheetrefs" "${INTERSHEET_REFS}"\n\t\t\t(at %s %s 0)\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1.27 1.27)\n\t\t\t\t)\n\t\t\t\t(justify %s)\n\t\t\t\t(hide yes)\n\t\t\t)\n\t\t)\n\t)' % (t, shape, x, y, _lang(j), j, u(), x, y, j))
 
     # text notes
-    for (t, x, y) in TEXTS:
-        out.append('\t(text "%s"\n\t\t(exclude_from_sim no)\n\t\t(at %s %s 0)\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size 1.27 1.27)\n\t\t\t)\n\t\t\t(justify left bottom)\n\t\t)\n\t\t(uuid "%s")\n\t)' % (t, x, y, u()))
+    for tx in TEXTS:
+        t, x, y = tx[:3]
+        size = tx[3] if len(tx) > 3 else 1.27
+        style = "".join("\n\t\t\t\t(%s yes)" % k for k in (tx[4:] if len(tx) > 4 else ()))
+        out.append('\t(text "%s"\n\t\t(exclude_from_sim no)\n\t\t(at %s %s 0)\n\t\t(effects\n\t\t\t(font\n\t\t\t\t(size %s %s)%s\n\t\t\t)\n\t\t\t(justify left bottom)\n\t\t)\n\t\t(uuid "%s")\n\t)' % (t, x, y, size, size, style, u()))
 
     # component symbols
     def place(ref, lib, val, x, y, ang, mir, footprint, dnp=False, is_power=False):
@@ -535,22 +588,26 @@ def emit():
         out.append("\t\t(dnp %s)" % ("yes" if dnp else "no"))
         out.append('\t\t(uuid "%s")' % u())
         if is_power:
+            # value where the library puts it (beside the arrow / bars),
+            # not on the pin, where it would sit on top of the wire
+            ox, oy = rot(0, POWER_VALUE_Y.get(lib, 0), ang)
             props_list = [("Reference", ref, x, y, True),
-                          ("Value", val, x, y, False),
+                          ("Value", val, round(x + ox, 4), round(y - oy, 4), False),
                           ("Footprint", "", x, y, True),
                           ("Datasheet", "", x, y, True)]
         else:
-            rx, ry = tpos[(ref, "Reference")]
-            vx, vy = tpos[(ref, "Value")]
-            props_list = [("Reference", ref, rx, ry, False),
-                          ("Value", val, vx, vy, False),
+            rpos, vpos = tpos[(ref, "Reference")], tpos[(ref, "Value")]
+            fang = rpos[2] if len(rpos) > 2 else 0
+            props_list = [("Reference", ref, rpos[0], rpos[1], False),
+                          ("Value", val, vpos[0], vpos[1], False),
                           ("Footprint", footprint, x, y, True),
                           ("Datasheet", "", x, y, True)]
         for (nm, v) in SIM_FIELDS.get(ref, []):
             props_list.append((nm, v, x, y, True))
         for (nm, v, px, py, hide) in props_list:
             h = "\n\t\t\t\t(hide yes)" if hide else ""
-            out.append('\t\t(property "%s" "%s"\n\t\t\t(at %s %s 0)\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1.27 1.27)\n\t\t\t\t)%s\n\t\t\t)\n\t\t)' % (nm, v, px, py, h))
+            pa = fang if (nm in ("Reference", "Value") and not is_power) else 0
+            out.append('\t\t(property "%s" "%s"\n\t\t\t(at %s %s %s)\n\t\t\t(effects\n\t\t\t\t(font\n\t\t\t\t\t(size 1.27 1.27)\n\t\t\t\t)%s\n\t\t\t)\n\t\t)' % (nm, v, px, py, pa, h))
         for pnum in pins:
             out.append('\t\t(pin "%s"\n\t\t\t(uuid "%s")\n\t\t)' % (pnum, u()))
         out.append("\t\t(instances")

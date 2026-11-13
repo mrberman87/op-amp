@@ -1,7 +1,7 @@
 {
   "version": 1,
   "project": "opamp.kicad_pro",
-  "current": "2026-10-13_1749",
+  "current": "2026-11-11_0851",
   "runs": {
     "2026-10-13_1748": {
       "source_hashes": {
@@ -29,6 +29,20 @@
         "schematic": "analyze_schematic.py opamp.kicad_sch"
       },
       "generated": "2026-10-13T17:49:51-07:00",
+      "pinned": false
+    },
+    "2026-11-11_0851": {
+      "source_hashes": {
+        "opamp.kicad_sch": "sha256:892251e01791ee6f4a0eb4f6ff5a30cd9382f2f7ef036cd82f146fba86c9050c"
+      },
+      "outputs": {
+        "schematic": "schematic.json",
+        "spice": "spice.json"
+      },
+      "scripts": {
+        "schematic": "analyze_schematic.py opamp.kicad_sch"
+      },
+      "generated": "2026-11-11T08:51:16-08:00",
       "pinned": false
     }
   }

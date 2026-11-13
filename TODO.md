@@ -1,311 +1,164 @@
-# TODO — discrete RF BJT op-amp (Rev C)
+# TODO — two-stage LCSC op-amp (Rev E)
 
-Status as of commit `8d79396` ("Fix Rev-C schematic wiring, replace offset trimmer
-with fixed R8"). The tree is clean and in a **known-good state**:
+Status: **two-stage design meets the 60 dB / 10 MHz spec in closed loop.**
 
-- `opamp.kicad_sch` regenerates from `gen_sch_rf.py` and passes
-  `kicad-cli sch erc` with **0 errors / 0 warnings**.
-- `sim/rf_final.py` is the source of truth for the netlist and reproduces the
-  documented operating point (Aol 58.8 dB, f-3dB 12.8 MHz, GBW 6.08 GHz,
-  PM 66.3 deg, Vos ~0 at RL = 10k).
-- The schematic's SPICE netlist matches `sim/rf_final.py` device-for-device
-  (checked by hand this session; see task 4 to make that automatic).
+Known-good state:
 
-Nothing below is started. Items are ordered by importance.
+- `gen_sch_rf.py` → `opamp.kicad_sch` (A3), ERC **0 errors / 0 warnings**.
+- `sim/rf_two_stage.py` closed-loop test: **59.91 dB, 0 dB peaking,
+  f−3dB 11.47 MHz, 57.96 dB at 10 MHz**.
+- The exported netlist reproduces the sim exactly (59.91 dB, 11.47 MHz).
+- `sim/stress_two.py`: no VCEO violations, no device above 50 % Pd.
+- `./check.sh` runs regenerate + ERC + netlist + closed-loop + stress.
 
 ---
 
-## 1. Confirm LCSC availability of the RF transistors (highest priority)
+## 1. Done
 
-### 1.1 Why this matters
-
-The user's requirement is that the board be sourced from **LCSC**. The blocker
-was believed to be that the 11 RF transistors are not in the LCSC/JLCPCB
-library. **That belief is now known to be wrong** (see 1.2), but it has not been
-confirmed end-to-end, so the sourcing decision is still open.
-
-The design uses 11 transistors — 6x BFP420 (NPN, fT 25 GHz) and 5x BFP520
-(PNP, fT 45 GHz):
-
-| Sim name | Schematic | Role | Part |
-|---|---|---|---|
-| Q1, Q2 | Q1, Q2 | input diff pair | BFP420 |
-| Qh | Q7 | regulated-cascode helper | BFP520 |
-| Q3, Q4 | Q3, Q4 | PNP mirror load | BFP520 |
-| Q3c, Q4c | Q5, Q6 | PNP cascodes | BFP520 |
-| Q5 | Q8 | output follower | BFP420 |
-| Qtail | Q10 | tail current source | BFP420 |
-| Qbuf | Q11 | follower current sink | BFP420 |
-| Qb | Q9 | bias reference diode | BFP420 |
-
-These parts are what give the design its 6 GHz GBW. A substitution to a
-general-purpose BJT would collapse the GBW and destroy the phase margin — the
-published performance depends on 25/45 GHz fT devices.
-
-### 1.2 What is already established
-
-- The `jlcsearch` index originally used to declare "not available" is
-  **incomplete**, not authoritative. It carries only the ~100 most popular
-  JLCPCB BJTs (all general-purpose, max fT 300 MHz: MMBT3904/3906, 2N3904,
-  MMBT2222A, S8050/S8550). That is why BFP420/BFP520 appeared absent.
-- LCSC's **own** autocomplete endpoint does recognise these parts:
-  - `BFP420` -> `BFP420H6327`, `MBFP420A1`, `MBFP420A2`
-  - `BFP520` -> `BFP520H6327`, `BFP520FE6327`
-  - also seen: `BFR93AW`, `2SC3356`, `BFG540/X`, `BFT92W,115`
-- **Caveat:** an autocomplete *suggestion* means the string is in LCSC's search
-  index. It does **not** prove the part is stocked, orderable, or in the
-  expected package. That must be confirmed per part (task 1.3).
-
-### 1.3 Tasks
-
-- [ ] **1.3.1** Get the LCSC part numbers (C-codes) for `BFP420H6327`,
-      `BFP520H6327`/`BFP520FE6327`, and any alternates (`MBFP420A1/A2`).
-- [ ] **1.3.2** For each C-code confirm via the product-detail endpoint:
-      stock, price at the needed quantity (6x NPN, 5x PNP), lifecycle status,
-      and **package**.
-- [ ] **1.3.3** Settle the package question — see task 2. The schematic
-      currently uses `Package_TO_SOT_SMD:SOT-23` for all 11 transistors, but
-      the Infineon BFP420/BFP520 are normally SOT-343 (4-lead). If the LCSC
-      parts are SOT-343 this needs a footprint and pin-map change, and the
-      "H6327" / "FE6327" suffixes must be decoded to know which variant it is.
-- [ ] **1.3.4** Get C-codes for the passives so a complete BOM can be issued:
-
-      | Ref | Value | Footprint |
-      |---|---|---|
-      | R1 | 13.7k | R_0603 |
-      | R2, R3 | 1k | R_0603 |
-      | R4 | 390 | R_0603 |
-      | R5 | 22 | R_0603 |
-      | R8 | 54.9 (E96, 1%) | R_0603 |
-      | R6 | 15k | R_0603 |
-      | R7 | 10k | R_0603 |
-      | C1, C2 | 100n | C_0603 |
-      | J1 | Conn_01x06 | PinHeader_1x06_P2.54mm_Vertical_SMD_Pin1Left |
-
-- [ ] **1.3.5** Decide the ordering strategy and write it into the README:
-      - (a) **LCSC-only** — if 1.3.1-1.3.3 come back clean, this is now the
-        likely answer and the earlier "redesign around LCSC parts" direction is
-        **not needed** (do not start a redesign without re-reading this file).
-      - (b) **Consigned parts** — if the RF transistors are not stockable,
-        JLCPCB's PCBA service accepts customer-supplied components. Source the
-        11 transistors from DigiKey/Mouser and consign them; keep everything
-        else LCSC-sourced. Zero schematic/sim change; preserves the design.
-      - (c) **Redesign around LCSC general-purpose BJTs** — last resort. Would
-        break the 6 GHz GBW claim and require re-doing compensation; treat as a
-        project, not a BOM swap.
-- [ ] **1.3.6** Optional: commit a small, working sourcing helper so this is not
-      re-derived. See 1.4 for the endpoint that works.
-
-### 1.4 Endpoints — what works and what does not
-
-Do not re-walk these; they were all probed this session.
-
-**Works** (needs a desktop-ish `User-Agent`):
-
-- MPN autocomplete (no C-codes, no stock):
-  `GET https://wmsc.lcsc.com/ftps/wm/search/v2/pre?keyword=<term>`
-  -> `{"code":200,"result":[{"type":"MPN","resultList":[{"key","value","highlight"}]}]}`
-- Product detail (needs the C-code — this is the authoritative one, includes
-  `stockNumber`):
-  `GET https://wmsc.lcsc.com/ftps/wm/product/detail?productCode=Cxxxxx`
-
-**Broken / unusable:**
-
-- `jlcsearch.tscircuit.com/api/search?q=...` — fuzzy nonsense; cannot find
-  `SS8050` or `MMBT3904`, which are definitely in the library. Useless for MPN
-  existence checks.
-- `jlcsearch.tscircuit.com/bjt_transistors/list.json` — only the 100 most
-  popular BJTs; **ignores** every filter param (`search`, `q`, `keyword`,
-  `mpn`, `name`).
-- `wmsc.lcsc.com/ftps/wm/search/v3/global` (+ `/export`) — returns HTTP 200
-  with `{"code":500}`. The Nuxt bundle references `encryptFields`, so this
-  endpoint likely wants signed/encrypted params. This is the one that would
-  give search results with C-codes directly, if it can be unlocked.
-- `wmsc.lcsc.com/ftps/wm/search/pre`, `/search/pre/link`, `/search/v2/pre/link`
-  — `{}` or 500.
-- `www.lcsc.com/search?q=...` — client-side SPA; no product data in the SSR
-  HTML.
-- `jlcpcb.com/api/overseas-pcb-order/v1/shoppingCart/smtGood/selectSmtComponentList`
-  — `code=200` with 0 rows for every query tried.
-- `easyeda.com/api/products/search` — 404.
-
-A throwaway helper was written at `/tmp/opencode/lcsc_suggest.py` during the
-investigation; `/tmp` is not durable, so re-create it from the spec above if
-needed.
+- [x] **Second gain stage.** Q13 (BFP420 CE) with R19 load, R20/C6 emitter,
+      C7 = 68 p Miller compensation. Open-loop gain ~110 dB.
+- [x] **Push-pull output** (Q16/Q18, class-AB, Q19 Vbe multiplier).
+- [x] **VCEO protection** (Q3/Q12/Q15/Q17 cascodes).
+- [x] **Capacitive-load stability** (R17 = 47 Ω isolation).
+- [x] **Tail dissipation** (R18 = 470 Ω).
+- [x] **Human-readable schematic**: functional blocks with dashed borders,
+      left-to-right signal flow, block titles.
 
 ---
 
-## 2. Transistor package / footprint reconciliation
+## 2. PCB layout
 
-- [ ] **2.1** Determine the physical package of the LCSC-stocked ordering codes
-      from 1.3.1.
-- [ ] **2.2** If it is **not** SOT-23, update every transistor footprint in
-      `gen_sch_rf.py` (`SOT23 = "Package_TO_SOT_SMD:SOT-23"`) and check the
-      pin map. The schematic uses `Q_NPN_BEC` / `Q_PNP_BEC` (pin 1 = B,
-      2 = E, 3 = C) and the symbol `Sim.Pins` fields say `1=B 2=E 3=C`.
-      A 4-lead SOT-343 part has a different pinout, so the symbol, the
-      `Sim.Pins` mapping, and the drawn wires would all need review.
-- [ ] **2.3** Regenerate and re-run ERC (see task 4) after any footprint change.
+Started: 4-layer board generated from the schematic table, all parts on top.
+`opamp.kicad_pcb` was first produced by `gen_pcb.py`; it is now edited in place
+(J1 locked by hand, placement by `place.py`), so `gen_pcb.py` must not be re-run
+on it. `set_rules.py` writes the rules; `verify_board.py` gates (inside `./check.sh`).
 
-Note: this is separate from electrical correctness — the *simulation* is done
-using the bare die models, so the package change does not alter the numbers.
-It affects only the fabricated board.
+**Done**
+- [x] **2.1 Stackup.** 4 copper, 1.6 mm: F.Cu signal+parts / In1.Cu solid GND /
+      In2.Cu +15 V and −15 V pours / B.Cu GND. Order as JLC0004-100L.
+- [x] **2.2 Outline.** 50 × 40 mm. Courtyards ≥ 1 mm inside the edge; a
+      courtyard-free strip along the bottom (y > 37.2 mm) and left (x < 2.2 mm)
+      edges is reserved for the OUT trace back to J1 pin 1.
+- [x] **2.3 All components on F.Cu** — asserted by the gate, not assumed.
+- [x] **2.4 SOT-343 pad 4.** BFP420 is 4-lead (1=B, 2=E, 3=C, 4=E); pad 4 is
+      created and tied to pad 2's net on all six BFP420s.
+- [x] **2.5 Netlist integrity.** 117/117 schematic pins match their board pads;
+      nets are taken from `gen_sch_rf.NET`, so board and schematic cannot drift.
+- [x] **2.6 Design rules.** min clearance 0.2 mm, min track 0.2 mm, via 0.6/0.3;
+      classes Default / Power (+/−15 V, GND: 0.5 mm, 0.8/0.4 via) / Analog (hi-Z).
+- [x] **2.7 Placement** (`place.py`, after a review + adversarial review).
+      Stage 1 is a ring on its side so INP/INN reach their bases from J1
+      without crossings; stage 2 above it with C6 beside Q13; output stage on
+      the right edge, NPN half over +15 V and PNP half over −15 V; R17/R7
+      bottom-right. Q1/Q2 2.8 mm apart (shared emitter copper), mirror Q4/Q6
+      4.6 mm apart with heat sources placed symmetrically about it. One
+      ratsnest crossing left, c1 × vcp — inherent in the circuit topology; take
+      it on vcp (DC bias) as a B.Cu hop. Courtyards ≥ 1.0 mm apart.
+- [x] **2.7a In2.Cu split.** +15 V top half, −15 V bottom half, plus a +15 V
+      finger down the left edge under J1 pin 5 and C1/C11 (J1's +15 V pin is
+      in the bottom half). Every rail pad sits over its own pour except R1.1
+      (+15 V, 7 mm from the pour): give it a short F.Cu trace.
+- [x] **2.7b Local decoupling** (added after review): C8 at Q17's collector,
+      C9 at Q18's collector, C10 at Q12's base, C4 at Q3's base, C5 at
+      Q15/Q17's bases, C11/C12 10 µF bulk at J1. All within 3.8 mm.
+- [x] **2.7c Mounting holes + fiducials.** M3 holes H1 (top-left) and H2
+      (bottom-right); fiducials FID1–3 on three corners; board ID on B.Silk.
+      Silkscreen references 1.0 mm / 0.15 mm, each beside its own part.
 
----
+**To do**
+- [ ] **2.8 Routing.** Nothing is wired yet (100 unconnected pads is expected
+      at this stage). Route F.Cu over the intact In1.Cu ground; do not put signal
+      traces on In1.Cu or In2.Cu.
+- [ ] **2.9 High-Z discipline.** Route c2, d1, d2, d3 and the C7 Miller loop
+      first, shortest possible, each with a via stitch to In1.Cu nearby.
+      Current spread (half-perimeter): c2 10.8, d1 5.1, d2 19.5, e1 7.9 mm.
+      Route OUT from R17/R7 along the bottom edge and up the left edge to J1
+      pin 1 (the reserved strip), not across stage 1.
+- [ ] **2.10 Thermal copper.** R19 (1206, 156 mW) needs a pour plus 2–3 vias
+      into In2.Cu; keep it away from Q13's base — 156 mW in still air shifts a
+      nearby BJT's Vbe by several hundred µV and the input offset is ~0.56 mV.
+- [ ] **2.11 Ground strategy.** Single solid GND, star-referenced at J1 pin 4.
+      Do not split the plane. Stitch the perimeter every 3–5 mm.
+- [ ] **2.12 Guard ring** around Q1/Q2/Q3 and the input traces from J1.
+- [ ] **2.13 Test points.** None placed yet: add +15V, −15V, vcn, vcd, c2, d2,
+      OUTA, OUT. Bring-up of this circuit is blind without them.
+- [ ] **2.16 Re-check after routing:** `kicad-cli pcb drc` must reach 0 violations
+      apart from nothing, and fill zones (`B` in the GUI) before generating
+      Gerbers.
 
-## 3. Fix the `TNOM` bug in the transistor models
-
-### 3.1 The bug
-
-`sim/rf_frontend.py` declares the model cards with a Kelvin temperature in a
-field ngspice reads as degrees Celsius:
-
-- line ~13: `BFP420` model ends with `... XTI=3 TNOM=300`
-- line ~18: `BFP520` model ends with `... XTI=0.35 TNOM=298`
-
-Per the `.model` card semantics `TNOM` is in degC, so these ask ngspice for
-300 degC and 298 degC — not the 27 degC / 25 degC the models were presumably
-extracted at. This was confirmed earlier by parameter bisection: the `TNOM`
-values are interpreted as Celsius and are model bugs.
-
-The same two strings are duplicated in `gen_sch_rf.py` as the `_BFP420` /
-`_BFP520` constants, which are exported into the schematic as the `Sim.*`
-symbol fields and therefore into
-`kicad-cli sch export netlist --format spice` output. So the generated
-schematic carries the same wrong `tnom=300`.
-
-### 3.2 Impact (measured, low)
-
-At the recommended point (Re4 = 54.9, RL = 10k), both models agree closely:
-
-| model | Aol | f-3dB | GBW | PM | Vos |
-|---|---|---|---|---|---|
-| as shipped (TNOM 300/298) | 58.8 dB | 12.8 MHz | 6.08 GHz | 66.3 deg | −0.6 mV |
-| corrected (TNOM 27/25) | 58.8 dB | 12.1 MHz | 6.05 GHz | 66.0 deg | −0.1 mV |
-
-The R8 = 54.9 ohm offset null holds under both, so **the fix does not change
-any design decision** — it only makes the model physically right.
-
-### 3.3 Tasks
-
-- [ ] **3.3.1** Decide whether to fix it (the user previously chose not to).
-- [ ] **3.3.2** If yes, change `TNOM=300` -> `TNOM=27` and `TNOM=298` ->
-      `TNOM=25` in **three** places:
-      - `sim/rf_frontend.py` (the authoritative model strings)
-      - `gen_sch_rf.py` (`_BFP420`, `_BFP520`)
-      - regenerate `opamp.kicad_sch` so the exported netlist matches
-- [ ] **3.3.3** Re-run `sim/rf_final.py` and `sim/render_openloop_bode.py`, then
-      update the published numbers in `README.md` sections 5e and 6, the §5e
-      table, the figure caption, the `rf_final.py` docstring, and the `TEXTS`
-      in `gen_sch_rf.py` (which quote "Aol ~= 58.8 dB ... GBW ~= 6 GHz").
-- [ ] **3.3.4** Re-run ERC.
-
----
-
-## 4. Add an ERC + netlist gate so "silently broken" cannot recur
-
-**Why:** the schematic committed in `8d79396` was broken for a whole session
-without anyone noticing, because the check that was run reported clean while
-`kicad-cli sch erc` found 36 violations (16 errors) on the same file. The root
-cause of the breakage was off-grid generator coordinates (J1 stubs at x = 45.08
-against pins at 45.72; C1/C2 power symbols at x = 255 against pins at x = 254),
-which leave pins connected to nothing.
-
-- [ ] **4.1** Add a `make check`-style script (or a `Makefile`) that runs:
-      ```
-      python3 gen_sch_rf.py
-      kicad-cli sch erc -o /tmp/erc.rpt opamp.kicad_sch        # expect 0 violations
-      kicad-cli sch export netlist --format spice -o /tmp/opamp.cir opamp.kicad_sch
-      ```
-      and fails if ERC reports anything, or if the offline output is
-      committed-but-unregenerated.
-- [ ] **4.2** Turn the `NETS` dict in `gen_sch_rf.py` into an actual test.
-      It is currently described as "Reference netlist for verification" but
-      **nothing consumes it** — it is dead reference data. Wire it up to parse
-      the `kicad-cli` spice netlist and assert the same connections. That also
-      closes the loop on the hand-verification done so far.
-- [ ] **4.3** Consider treating `gen_sch_rf.py` output as generated: either
-      commit it (current practice) and gate on reproducibility, or regenerate
-      on demand. Do not leave it to drift silently again.
+**Deliberate choice worth knowing:** R17 (47 Ω isolation) and R7 (10 k load)
+sit at the output stage, bottom-right, so R17 isolates the long OUT trace's
+capacitance from the output pair. OUT then returns to J1 pin 1 along the bottom
+and left edges (a part-free strip is reserved for it), past the tail and bias
+parts and away from the stage-1/stage-2 high-impedance nodes.
 
 ---
 
-## 5. Housekeeping (low priority)
+## 3. BOM / ordering
 
-- [ ] **5.1** Local backup clutter, all gitignored and safe to delete once the
-      committed schematic is confirmed good:
-      `gen_sch.py.bak`, `opamp.kicad_sch.bak-pregen`,
-      `opamp.kicad_sch.bak2-pregen`.
-- [ ] **5.2** `gen_sch.py` (the base emitter) and `gen_sch_rf.py` (the Rev-C
-      override) both exist; confirm `gen_sch.py` is still the intended shared
-      base and that `gen_sch.py.bak` is not newer.
-- [ ] **5.3** `sim/rf_final.py` defaults to `rl="1k"` while the schematic and
-      the README's published point use `R7 = 10k`. This is deliberate and
-      already documented, but it is a trap — consider defaulting to `10k` or
-      making the recommended call explicit in `__main__`.
-- [ ] **5.4** Decide whether to keep the earlier-iteration scripts
-      (`rf_two.py`, `rf_wide.py`, `waveband*.py`) or move them to an
-      `sim/archive/` directory.
+| Ref | Value / part | Package | LCSC | Notes |
+|---|---|---|---|---|
+| Q1, Q2, Q11, Q13, Q14, Q16 | BFP420H6327 | SOT-343 | **C412737** | 32 k stock |
+| Q4–Q8, Q18 | MMBTH81 | SOT-23 | **C190349** | 10.6 k stock |
+| Q3, Q9, Q10, Q12, Q15, Q17, Q19 | MMBT3904 | SOT-23 | **C20526** | 4.3 M stock |
+| R19 | 1k | **1206** | — | 156 mW |
+| R1 | 13.7k | 0603 | — | bias reference |
+| R2 | 1k | 0603 | — | |
+| R3 | 180 | 0603 | — | tail |
+| R4 | 6.8k | 0603 | — | vcn top |
+| R5 | 22 | 0603 | — | mirror ref |
+| R6 | 22k | 0603 | — | helper |
+| R7 | 10k | 0603 | — | load |
+| R8 | 20 | 0603 | — | mirror out |
+| R9 | 8.2k | 0603 | — | vcn bottom |
+| R10 | 6.8k | 0603 | — | vcd top |
+| R11 | 11k | 0603 | — | vcd bottom |
+| R12/R13 | 1.8k / 1.2k | 0603 | — | Vbe multiplier |
+| R14 | 10k | 0603 | — | |
+| R15/R16 | 4.7 | 0603 | — | output emitters |
+| R17 | 47 | 0603 | — | isolation |
+| R18 | 470 | 0603 | — | tail collector |
+| R20 | 50 | 0603 | — | stage-2 emitter |
+| C1–C5, C8–C10 | 100n | 0603 | — | |
+| C11, C12 | 10 µF, ≥25 V X5R | 1206 | — | rail bulk at J1 |
+| C6 | 220 µF | 6.3×5.4 mm | — | stage-2 bypass |
+| C7 | 68 p | 0603 | — | Miller |
+
+- [ ] **3.1** Resolve LCSC C-codes for the 0603 passives (all E24/E96).
+- [ ] **3.2** Check JLCPCB assembly availability (BFP420/MMBTH81 are
+      extended parts; expect a setup fee).
 
 ---
 
-## Reference
+## 4. Characterization / improvements
 
-### Reproduction commands
+- [ ] **4.1 Output DC offset.** At 60 dB closed loop the ~0.5 mV input offset
+      becomes ~0.5 V at the output. Add a trim (Re4/R5 asymmetry) or a DC
+      servo if a low offset is required.
+- [ ] **4.2 Temperature sweep** (0 / 27 / 70 °C): gain, bandwidth, offset.
+- [ ] **4.3 CMRR / PSRR** — not measured.
+- [ ] **4.4 Large-signal / slew rate / clipping.** The class-AB stage has not
+      been characterised at full swing.
+- [ ] **4.5 Closed-loop step response** and settling.
+- [ ] **4.7 Input-pair thermal asymmetry.** Q2 dissipates ~19 mW, Q1 ~8 mW
+      (Q1 is cascoded by Q3, Q2 is not). Self-heating mismatch ≈ several mV of
+      input offset, not visible in SPICE. Fix in the circuit: cascode Q2's
+      collector too (an MMBT3904 with its base on vcn), then re-run
+      rf_two_stage.py / verify_netlist.py.
+- [ ] **4.8 Base stoppers.** Consider 0603 base-stopper footprints at the
+      BFP420 follower bases (Q11, Q14, Q16) if bench shows GHz oscillation.
+- [ ] **4.6 Low-frequency corner.** C6 = 220 µF gives a ~15 Hz open-loop
+      corner; the closed loop is flat to 0.01 Hz because Aol ≫ 60 dB there.
+      Verify on the bench.
 
-```bash
-# regenerate the schematic (writes opamp.kicad_sch)
-python3 gen_sch_rf.py
+---
 
-# design-rule check — must report 0 violations
-kicad-cli sch erc -o /tmp/erc.rpt opamp.kicad_sch
+## 5. Housekeeping
 
-# schematic -> SPICE netlist (for cross-checking against sim/rf_final.py)
-kicad-cli sch export netlist --format spice -o /tmp/opamp.cir opamp.kicad_sch
-
-# open-loop metrics at the recommended point
-cd sim && python3 rf_final.py
-
-# re-render the README figure (writes artifacts/freq_response_openloop.png)
-cd sim && python3 render_openloop_bode.py
-```
-
-### Measured offset-null data (RL = 10k, as-shipped models)
-
-| Re4 (R8) | Aol | f-3dB | GBW | PM | Vos |
-|---|---|---|---|---|---|
-| 30 | 60.2 dB | 13.8 MHz | 6.25 GHz | 59.9 deg | +16.2 mV |
-| 45 | 59.5 dB | 13.0 MHz | 6.14 GHz | 64.8 deg | +4.9 mV |
-| 51 | 59.0 dB | 13.0 MHz | 6.14 GHz | 65.6 deg | +1.5 mV |
-| **54.9** | **58.8 dB** | **12.8 MHz** | **6.08 GHz** | **66.3 deg** | **−0.6 mV** |
-| 60 | 58.7 dB | 12.6 MHz | 5.99 GHz | 67.2 deg | −3.1 mV |
-
-The offset being nulled is **systematic**, not component mismatch: at the
-balanced point the reference-side cascode is saturated (Q3c ib ~ −306 uA vs
-Q4c ~ −4.4 uA) and the input pair's collectors sit at very different voltages
-(Q1 at the mirror reference node ~+14 V, Q2 at the output node), so Early
-effect (VAF ~ 28 V) alone gives a ~40 % mirror current error. Matching the two
-legs cannot fix it — matched legs were measured to give a *larger* Vos.
-
-### Simulation gotchas (ngspice 45.2)
-
-- `@q[ic]` is not swept by a `.dc` sweep; and `print` after `dc` in a
-  `.control` block emits only the first point.
-- `wrdata` repeats the scale column before each vector (N vectors -> 2N
-  columns). Mis-parsing this silently produced several wrong results.
-- A standalone `op` on a directly-wired follower converges to a spurious root
-  (OUT = −13.5 V). Use the follower sweep (`dc Vin -14 14 0.5`, read `v(OUT)`
-  at Vin = 0) to measure `Vos` — unity-gain, so it equals the input offset.
-- Node naming in `sim/rf_final.py` is load-bearing: `c1` is simultaneously
-  Q1's collector, the Q3/Q4 base tie and Q3c's collector (the mirror diode
-  node). Renaming `c1` breaks the mirror's diode connection.
-- The two "corrected" numbers in section 3.2 differ from the shipped ones only
-  because of the `TNOM` bug; everything else about the netlist is identical.
-
-### Environment
-
-- KiCad 10.0.6, `kicad-cli` at `/usr/bin/kicad-cli`.
-- ngspice 45.2. `matplotlib` is **not** installed; figures are rendered with
-  Pillow (`sim/bode.py` + `sim/render_openloop_bode.py`).
-- `sim/*.png` is gitignored — the README figure deliberately lives in the
-  tracked `artifacts/` directory instead.
+- [ ] **5.1** Rev-C/Rev-D files (`sim/rf_final.py`, `sim/rf_frontend.py`,
+      `sim/rf_lcsc.py`, `sim/rf_two.py`, `sim/rf_wide.py`) are historical.
+      `rf_frontend.py` still contains the **fictitious BFP520 PNP model**.
+- [ ] **5.2** Delete the old schematic backups (`opamp.kicad_sch.bak*`,
+      `gen_sch.py.bak`).
+- [ ] **5.3** Regenerate or remove `artifacts/freq_response_openloop.png`
+      (it is the Rev-C figure).
