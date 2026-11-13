@@ -7,9 +7,12 @@ Policy (TODO 2.x, set_stackup.py):
     and never for the stage-2 signal / AC-ground nets (place.NO_CROSS);
   * every GND / +15 V / -15 V pad fans out with a short stub to a via; a rail
     via must land inside its own In2.Cu pour (place.rail_miss);
-  * OUT runs back to J1 pin 1 through the part-free strip along the bottom
-    and left edges, away from the high-impedance nodes;
-  * GND stitching vias around the perimeter tie In1.Cu to the B.Cu pour.
+  * OUT and OUTA run on B.Cu straight along the In2.Cu GND corridor
+    (corridor()): OUT to J1 pin 4, OUTA to the feedback resistor R24;
+  * GND stitching vias around the perimeter tie In1.Cu to the B.Cu pour;
+  * afterwards every net is ripped up and rerouted alone against the finished
+    board, kept if shorter (improve()), and every chain is redrawn with as
+    few 0/45/90-degree segments as clear the other nets (tidy()).
 
 Clearances come from the real copper of other nets (distance transform on a
 0.1 mm grid) with the net-class rules from set_rules.py plus a margin, and the
@@ -47,10 +50,12 @@ VIA_COST = 25.0               # in grid steps (2.5 mm of track)
 B_COST = 4.0                  # B.Cu step multiplier (it is the GND pour)
 
 # routing order: the stage-2 loop and the high-Z nodes get first pick of the
-# copper, then the OUT return (so the edge strip is still free), then the rest
-CRITICAL = ["INN", "INP", "e1", "d1", "c2", "c2b", "d2", "d2b", "T", "d3", "d3b", "b9", "db", "a1", "n1", "n2",
-            "c1", "e3", "e4", "x8", "x9", "xo", "n8", "n9", "OUTA"]
-LATE = ["vcp", "vcn", "vcd", "vref", "veb", "vet", "Tc"]
+# copper, then the rest
+# vcp (the undecoupled 22k cascode-base line) and the mirror emitters e3/e4
+# go early too: routed late they detoured round the output stage.
+CRITICAL = ["INN", "INP", "e1", "d1", "c2", "c2b", "d2", "d2b", "T", "vcp", "e3", "e4",
+            "d3", "d3b", "b9", "db", "a1", "n1", "n2", "c1", "x8", "x9", "xo", "n8", "n9", "OUTA"]
+LATE = ["vcn", "vcd", "vref", "veb", "vet", "Tc"]
 
 
 def mm2(v):
@@ -86,6 +91,7 @@ class Router(object):
         self.tht = set()          # (net, ref, num) of plated-through pads
         self.holes = []           # (x, y, radius) of every drilled hole
         self.fan_len = []         # (stub length, pad, net) per fanout
+        self.seeded = {}          # nid -> (done points, pads already connected)
         self._load_copper()
 
     # ---- geometry -------------------------------------------------------
@@ -390,9 +396,15 @@ class Router(object):
         nid = self.net_id[net]
         pads = list(self.pads[net])
         w, clr, via = W_SIG, CLR_SIG, VIA_SIG
-        # connect pads in nearest-first order to the growing tree
-        done = [pads.pop(0)]
-        self.tree.setdefault(nid, set()).update(done[0][4])
+        # connect pads in nearest-first order to the growing tree; a net with
+        # fixed copper already down (corridor()) grows from that copper
+        pre = self.seeded.get(nid)
+        if pre:
+            done = list(pre[0])
+            pads = [p_ for p_ in pads if (p_[0], p_[1]) not in pre[1]]
+        else:
+            done = [pads.pop(0)]
+            self.tree.setdefault(nid, set()).update(done[0][4])
         fails = 0
         while pads:
             # next pad: the one nearest the connected set
@@ -485,6 +497,31 @@ class Router(object):
             n += 1
         return n
 
+    def stitch_corridor(self):
+        """GND vias along both edges of the In2.Cu GND corridor, every
+        CORR_STITCH_PITCH mm where one fits (within 1 mm along the row)."""
+        nid = self.net_id["GND"]
+        n = 0
+        for y in CORR_STITCH_Y:
+            x = 3.0
+            while x <= place.W - 3.0:
+                vok = self.via_map(nid, VIA_SIG, CLR_PWR)
+                i = int(round(y / G))
+                best = None
+                for dx in np.arange(-1.0, 1.01, G):
+                    j = int(round((x + dx) / G))
+                    if 0 <= j < self.nx and vok[i, j]:
+                        if best is None or abs(dx) < abs(best[0]):
+                            best = (dx, j)
+                if best is not None:
+                    vx, vy = best[1] * G, i * G
+                    self.paint_disk((F, B), nid, vx, vy, VIA_SIG[0] / 2.0)
+                    self.added.append(("GND", "via", (vx, vy, VIA_SIG)))
+                    self.holes.append((vx, vy, VIA_SIG[1] / 2.0))
+                    n += 1
+                x += CORR_STITCH_PITCH
+        return n
+
     # ---- write ----------------------------------------------------------
     def write(self):
         for t in list(self.b.GetTracks()):
@@ -551,18 +588,313 @@ def thermal_pad(board, pads, num, ref):
         board.Add(z)
 
 
-def edge_cost(r):
-    """OUT runs on B.Cu (shielded from the F.Cu high-Z nodes by the In1 GND
-    plane) and hugs the board edge so it does not carve the B.Cu GND pour in
-    two.  Per-layer cost maps: (F.Cu, B.Cu)."""
-    near_edge = r.d_edge <= place.FRAME - 0.6     # inside the In2 GND frame
-    out_cost = (np.full(r.d_edge.shape, 8.0), np.where(near_edge, 1.0, 20.0))
-    return out_cost, None
+# OUT and OUTA: B.Cu runs straight along the In2.Cu GND corridor
+# (place.CORR_TOP .. CORR_BOT), board-local mm.  OUT: from a via beside its
+# output-stage pads (R17 / R7 / TP7) to J1 pin 4 (plated through, no via).
+# OUTA: from a via beside the output node (R15 / R16 / R17 / TP6) to a via
+# beside R24 pad 1.  Under In1's solid GND the whole way, never beside an
+# F.Cu high-impedance node.  Via spots are chosen per placement: the legal
+# spot on the run's centre line nearest the pads it serves.
+OUT_Y, OUTA_Y = 20.65, 21.6
+# GND stitching rows along both edges of the corridor (In2 GND strip <-> In1
+# <-> B.Cu), clear of OUT / OUTA and of the rail pours
+CORR_STITCH_Y = (19.7, 22.35)
+CORR_STITCH_PITCH = 3.5
+OUT_J1 = (6.0, 21.1)
+CORR_X_MIN = 9.0           # corridor vias stay right of J1's pin row
+W_OUT, W_OUTA = 0.5, 0.3
 
 
-def route_all(order, out_cost, board_path):
+def corridor(r):
+    """Lay the OUT / OUTA corridor runs and seed both nets from them, so the
+    remaining pads connect to the nearest corridor via on F.Cu."""
+    def seg(n, a, b, w):
+        r.paint_seg(B, r.net_id[n], a, b, w)
+        r.added.append((n, "seg", (B, a, b, w)))
+
+    def spot(n, y, near):
+        # 0.4 mm instead of the 0.2 mm rule where it fits: the corridor vias
+        # carry the output swing, keep them off neighbouring nets (T, at
+        # R24).  Never left of J1's pin row (the run would cross pin 4).
+        i = int(round(y / G))
+        cx = sum(px for px, _py in near) / len(near)
+        for clr in (0.4, 0.3, CLR_SIG):
+            vm = r.via_map(r.net_id[n], VIA_SIG, clr)
+            js = [j_ for j_ in np.nonzero(vm[i])[0] if j_ * G >= CORR_X_MIN]
+            if not js:
+                continue
+            j = min(js, key=lambda j_: sum(math.hypot(j_ * G - px, y - py) for px, py in near))
+            if abs(j * G - cx) <= 4.0 or clr == CLR_SIG:
+                return (j * G, y)
+        raise SystemExit("no via spot for %s on y = %.1f" % (n, y))
+
+    def via(n, at):
+        r.paint_disk((F, B), r.net_id[n], at[0], at[1], VIA_SIG[0] / 2)
+        r.added.append((n, "via", (at[0], at[1], VIA_SIG)))
+        r.holes.append((at[0], at[1], VIA_SIG[1] / 2))
+        i, j = r.cell(*at)
+        cells = {(F, i, j), (B, i, j)}
+        r.tree.setdefault(r.net_id[n], set()).update(cells)
+        return ("via", "", at[0], at[1], cells)
+
+    def pads(n, keep):
+        return [(x, y) for (ref, _num, x, y, _c) in r.pads[n] if keep(ref)]
+
+    out_at = spot("OUT", OUT_Y, pads("OUT", lambda ref: ref != "J1"))
+    o = via("OUT", out_at)
+    seg("OUT", out_at, (OUT_J1[0] + 0.6, OUT_Y), W_OUT)
+    seg("OUT", (OUT_J1[0] + 0.6, OUT_Y), OUT_J1, W_OUT)
+    j1 = [p_ for p_ in r.pads["OUT"] if p_[0] == "J1"][0]
+    r.tree[r.net_id["OUT"]].update(j1[4])
+    r.seeded[r.net_id["OUT"]] = ([o, j1], {("J1", "4")})
+    right = spot("OUTA", OUTA_Y, pads("OUTA", lambda ref: ref != "R24"))
+    a1 = via("OUTA", right)
+    left = spot("OUTA", OUTA_Y, pads("OUTA", lambda ref: ref == "R24"))
+    a2 = via("OUTA", left)
+    seg("OUTA", right, left, W_OUTA)
+    r.seeded[r.net_id["OUTA"]] = ([a1, a2], set())
+    r.corridor_vias = {"OUT": out_at, "OUTA": (right, left)}
+
+
+
+
+def _cost(items):
+    """Track length plus 2.5 mm per via: what the improvement pass minimises."""
+    L = 0.0
+    for _n, kind, d in items:
+        if kind == "seg":
+            _l, a, b, _w = d
+            L += math.hypot(b[0] - a[0], b[1] - a[1])
+        else:
+            L += VIA_COST * G
+    return L
+
+
+def _painted(board, items):
+    """A fresh Router with `items` (another run's tracks / vias) on it."""
+    r = Router(board)
+    for net, kind, d in items:
+        nid = r.net_id[net]
+        if kind == "seg":
+            l, a, b, w = d
+            r.paint_seg(l, nid, a, b, w)
+        else:
+            x, y, via = d
+            r.paint_disk((F, B), nid, x, y, via[0] / 2.0)
+            r.holes.append((x, y, via[1] / 2.0))
+        r.added.append((net, kind, d))
+    return r
+
+
+def improve(board, items, nets, passes=2):
+    """Rip-up and reroute, one net at a time against the finished board: the
+    first routing pass is order-dependent (early nets take the straight
+    paths, later ones detour round them).  A net's new route is kept only if
+    it is shorter (vias counted as 2.5 mm)."""
+    for p_ in range(passes):
+        gained = 0.0
+        for net in nets:
+            mine = [it for it in items if it[0] == net]
+            if not mine:
+                continue
+            rest = [it for it in items if it[0] != net]
+            r = _painted(board, rest)
+            if net in ("OUT", "OUTA"):
+                continue
+            n0 = len(r.added)
+            if not r.route_signal(net, r.hot_cost(net), net not in place.NO_CROSS):
+                continue
+            new = r.added[n0:]
+            if _cost(new) < _cost(mine) - 0.05:
+                gained += _cost(mine) - _cost(new)
+                items = rest + new
+        print("improvement pass %d: %.1f mm shorter" % (p_ + 1, gained))
+        if gained < 0.5:
+            break
+    return items
+
+
+def _octi(a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    if abs(dx) < 1e-6 or abs(dy) < 1e-6:
+        return True
+    return abs(abs(dx) - abs(dy)) < 1e-6
+
+
+def _elbows(a, b):
+    """The two 0/45/90-degree two-segment routes from a to b (diagonal leg
+    first, or straight leg first)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    m = min(abs(dx), abs(dy))
+    sx, sy = (1 if dx > 0 else -1), (1 if dy > 0 else -1)
+    c1 = (a[0] + sx * m, a[1] + sy * m)          # diagonal, then straight
+    c2 = (b[0] - sx * m, b[1] - sy * m)          # straight, then diagonal
+    return [c1, c2]
+
+
+def tidy(board, items):
+    """Redraw every routed chain with as few 0/45/90-degree segments as fit.
+
+    The grid router leaves staircases of 0.1 mm steps and odd-angle stubs at
+    off-grid pad centres.  Per net and layer, the segments are joined into
+    chains between fixed points (pads, vias, junctions of three or more
+    segments); each chain is string-pulled: from each point, jump to the
+    farthest later point reachable by one straight 0/45/90 segment or a
+    two-segment elbow whose copper clears every other net (the router's own
+    clearance map).  The first and last legs may be at any angle (the pad
+    entry), but only if short (< 0.6 mm)."""
+    pad_pts = {}
+    for f in board.GetFootprints():
+        for pd in f.Pads():
+            pad_pts.setdefault(pd.GetNetname(), []).append(pd.GetPosition())
+    out = []
+    nets = sorted({it[0] for it in items})
+    for net in nets:
+        mine = [it for it in items if it[0] == net]
+        segs = [it for it in mine if it[1] == "seg"]
+        if len(segs) < 2:
+            out += mine
+            continue
+        rest = [it for it in items if it[0] != net]
+        r = _painted(board, rest)
+        nid = r.net_id[net]
+        key = lambda p_: (round(p_[0], 3), round(p_[1], 3))
+        fixed = set()
+        for _n, kind, d in mine:
+            if kind == "via":
+                fixed.add(key((d[0], d[1])))
+        for v in pad_pts.get(net, []):
+            x, y = r.loc(v)
+            fixed.add(key((x, y)))
+        new = [it for it in mine if it[1] != "seg"]
+        for layer in (F, B):
+            ls = [d for _n, _k, d in segs if d[0] == layer]
+            if not ls:
+                continue
+            # a branch may join mid-segment: split there so the joint becomes
+            # a vertex (a fixed point) before any chain is simplified
+            joints = [p_ for (_l, a, b, _w) in ls for p_ in (a, b)] + \
+                [(d[0], d[1]) for _n, k_, d in mine if k_ == "via"]
+            changed = True
+            while changed:
+                changed = False
+                nxt = []
+                for (l_, a, b, w_) in ls:
+                    cut = None
+                    for p_ in joints:
+                        if key(p_) in (key(a), key(b)):
+                            continue
+                        ab = (b[0] - a[0], b[1] - a[1])
+                        L2 = ab[0] ** 2 + ab[1] ** 2
+                        if L2 < 1e-12:
+                            continue
+                        t = ((p_[0] - a[0]) * ab[0] + (p_[1] - a[1]) * ab[1]) / L2
+                        if 0 < t < 1:
+                            qx, qy = a[0] + t * ab[0], a[1] + t * ab[1]
+                            if math.hypot(qx - p_[0], qy - p_[1]) < 2e-3:
+                                cut = p_
+                                break
+                    if cut is None:
+                        nxt.append((l_, a, b, w_))
+                    else:
+                        nxt += [(l_, a, cut, w_), (l_, cut, b, w_)]
+                        changed = True
+                ls = nxt
+            widths = {}
+            adj = {}
+            for (_l, a, b, w) in ls:
+                ka, kb = key(a), key(b)
+                if ka == kb:
+                    continue
+                adj.setdefault(ka, []).append(kb)
+                adj.setdefault(kb, []).append(ka)
+                widths[frozenset((ka, kb))] = w
+            stops = {k for k, v in adj.items() if len(v) != 2 or k in fixed}
+            seen = set()
+            chains = []
+            for st in list(stops) + list(adj):
+                for nb in adj.get(st, []):
+                    e = frozenset((st, nb))
+                    if e in seen:
+                        continue
+                    ch, prev, cur = [st], st, nb
+                    seen.add(e)
+                    while cur not in stops and (cur != st):
+                        ch.append(cur)
+                        nxt = [q for q in adj[cur] if q != prev]
+                        if not nxt:
+                            break
+                        prev, cur = cur, nxt[0]
+                        seen.add(frozenset((prev, cur)))
+                    ch.append(cur)
+                    w = max(widths.get(frozenset((ch[i], ch[i + 1])), W_SIG)
+                            for i in range(len(ch) - 1))
+                    chains.append((ch, w))
+            for ch, w in chains:
+                clr = CLR_PWR if net in POWER else (0.25 if net in place.HIGH_Z else CLR_SIG)
+                free = r.free_map(nid, w, clr)[layer]
+
+                def clear(a, b):
+                    L = math.hypot(b[0] - a[0], b[1] - a[1])
+                    n = max(2, int(L / 0.04) + 1)
+                    for t in range(n + 1):
+                        x = a[0] + (b[0] - a[0]) * t / n
+                        y = a[1] + (b[1] - a[1]) * t / n
+                        i, j = int(round(y / G)), int(round(x / G))
+                        if not (0 <= i < r.ny and 0 <= j < r.nx):
+                            return False
+                        if not free[i, j]:
+                            # own copper already there (the old chain, a pad)
+                            if r.owner[layer][i, j] != nid:
+                                return False
+                    return True
+
+                pts = ch
+                res = [pts[0]]
+                i = 0
+                last = len(pts) - 1
+                while i < last:
+                    step = None
+                    for k in range(last, i, -1):
+                        a, b = pts[i], pts[k]
+                        end_leg = (i == 0 or k == last) and \
+                            math.hypot(b[0] - a[0], b[1] - a[1]) < 0.6
+                        if (_octi(a, b) or end_leg) and clear(a, b):
+                            step = [b]
+                            break
+                        for c in _elbows(a, b):
+                            if clear(a, c) and clear(c, b):
+                                step = [c, b]
+                                break
+                        if step:
+                            break
+                    if step is None:
+                        step = [pts[i + 1]]
+                        k = i + 1
+                    res += step
+                    i = k
+                # drop collinear interior points
+                clean = [res[0]]
+                for q in res[1:]:
+                    if len(clean) >= 2:
+                        a, b = clean[-2], clean[-1]
+                        if abs((b[0] - a[0]) * (q[1] - b[1]) - (b[1] - a[1]) * (q[0] - b[0])) < 1e-6 \
+                                and ((b[0] - a[0]) * (q[0] - b[0]) + (b[1] - a[1]) * (q[1] - b[1])) >= 0:
+                            clean[-1] = q
+                            continue
+                    if q != clean[-1]:
+                        clean.append(q)
+                for a, b in zip(clean, clean[1:]):
+                    new.append((net, "seg", (layer, a, b, w)))
+                    r.paint_seg(layer, nid, a, b, w)
+        out += new
+    return out
+
+
+def route_all(order, board_path):
     board = pcbnew.LoadBoard(board_path)
     r = Router(board)
+    corridor(r)
     failed = []
     nf = 0
 
@@ -592,10 +924,7 @@ def route_all(order, out_cost, board_path):
     for net in order:
         if net not in early:
             continue
-        if net == "OUT":
-            ok = r.route_signal(net, out_cost, True, layer_cost=(1.0, 1.0))
-        else:
-            ok = r.route_signal(net, r.hot_cost(net), net not in place.NO_CROSS)
+        ok = r.route_signal(net, r.hot_cost(net), net not in place.NO_CROSS)
         if not ok:
             failed.append(net)
     nf += do_fanouts()
@@ -624,18 +953,33 @@ def main():
                         for p in f.Pads()]
         thermal_pad(board, pads, "1", "R19")
         pcbnew.ZONE_FILLER(board).Fill(board.Zones())
-        if not pcbnew.SaveBoard(a.post, board):
+        pro_path = os.path.join(ROOT, "opamp.kicad_pro")
+        pro_text = open(pro_path).read()
+        ok = pcbnew.SaveBoard(a.post, board)
+        open(pro_path, "w").write(pro_text)
+        if not ok:
             raise SystemExit("save failed")
         print("thermal copper on R19 pad 1, pours filled")
         return
+    # start from the board with any old routing stripped (text level: see
+    # place.strip_routing), the project file beside it for the real rules
+    pro_path = os.path.join(ROOT, "opamp.kicad_pro")
+    pro_text = open(pro_path).read()
+    src, nold = place.strip_routing(open(a.inp).read())
+    clean = os.path.join(ROOT, ".route_tmp_%d.kicad_pcb" % os.getpid())
+    open(clean, "w").write(src)
+    import shutil
+    shutil.copy(pro_path, clean[:-10] + ".kicad_pro")
+    if nold:
+        print("stripped %d old tracks / vias" % nold)
+    a.inp = clean
     probe = Router(pcbnew.LoadBoard(a.inp))
-    out_cost, _ = edge_cost(probe)
     sig_nets = [n for n in probe.pads if n not in POWER and len(probe.pads[n]) > 1]
     order = [n for n in CRITICAL if n in sig_nets] + ["OUT"] + \
         [n for n in LATE if n in sig_nets]
     order += [n for n in sig_nets if n not in order]
     for attempt in range(a.tries):
-        board, r, failed, nf = route_all(order, out_cost, a.inp)
+        board, r, failed, nf = route_all(order, a.inp)
         print("attempt %d: incomplete %s, fanout failures %d" % (attempt + 1, failed or "none", nf))
         if not failed and nf == 0:
             break
@@ -643,10 +987,21 @@ def main():
         order = failed + [n for n in order if n not in failed]
     print("longest fanout stubs: %s" % ", ".join(
         "%s %.1f mm" % (p_, L) for L, p_, _n in sorted(r.fan_len, reverse=True)[:5]))
+    items = improve(board, list(r.added),
+                    [n for n in order if n not in ("OUT", "OUTA")])
+    n0 = sum(1 for it in items if it[1] == "seg")
+    items = tidy(board, items)
+    print("tidy: %d segments -> %d" % (n0, sum(1 for it in items if it[1] == "seg")))
+    r = _painted(board, items)
     ns = r.stitch()
-    print("stitching vias: %d" % ns)
+    nc = r.stitch_corridor()
+    print("stitching vias: %d perimeter, %d along the corridor" % (ns, nc))
     r.write()
-    if not pcbnew.SaveBoard(a.out, board):
+    ok = pcbnew.SaveBoard(a.out, board)
+    os.remove(clean)
+    os.remove(clean[:-10] + ".kicad_pro")
+    open(pro_path, "w").write(pro_text)
+    if not ok:
         raise SystemExit("save failed")
     # thermal copper + pour fill in a fresh process: after several boards have
     # been loaded here, pcbnew's SWIG wrappers return untyped objects

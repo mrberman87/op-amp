@@ -111,13 +111,14 @@ _PLACE = [
     ("C9", CAP, "100n", 186, 127, 0, None, C),
 
     # ---- lower band, second row: test points (probe pads) ----
-    ("TP1", TP, "TestPoint", 26, 159, 0, None, TPAD),
-    ("TP2", TP, "TestPoint", 38, 159, 0, None, TPAD),
-    ("TP3", TP, "TestPoint", 50, 159, 0, None, TPAD),
-    ("TP4", TP, "TestPoint", 62, 159, 0, None, TPAD),
-    ("TP5", TP, "TestPoint", 74, 159, 0, None, TPAD),
-    ("TP6", TP, "TestPoint", 86, 159, 0, None, TPAD),
-    ("TP7", TP, "TestPoint", 98, 159, 0, None, TPAD),
+    ("TP1", TP, "TestPoint", 24, 159, 0, None, TPAD),
+    ("TP2", TP, "TestPoint", 35, 159, 0, None, TPAD),
+    ("TP3", TP, "TestPoint", 46, 159, 0, None, TPAD),
+    ("TP4", TP, "TestPoint", 57, 159, 0, None, TPAD),
+    ("TP5", TP, "TestPoint", 68, 159, 0, None, TPAD),
+    ("TP6", TP, "TestPoint", 79, 159, 0, None, TPAD),
+    ("TP7", TP, "TestPoint", 90, 159, 0, None, TPAD),
+    ("TP8", TP, "TestPoint", 101, 159, 0, None, TPAD),
 
     # ---- lower band, second row: on-board feedback (sets the 60 dB gain) ----
     ("R24", RES, "10k", 128, 160, 90, None, R),
@@ -182,8 +183,8 @@ NET = {
     # GND (pin 2) and INN (pin 3) sit between the non-inverting input and the
     # output, so the terminal cannot couple OUT back into INP (positive
     # feedback at 60 dB); OUT next to INN is negative feedback, harmless
-    ("J1", "1"): "INP", ("J1", "2"): "GND", ("J1", "3"): "INN",
-    ("J1", "4"): "OUT", ("J1", "5"): "+15V", ("J1", "6"): "-15V",
+    ("J1", "1"): "+15V", ("J1", "2"): "INP", ("J1", "3"): "GND",
+    ("J1", "4"): "OUT", ("J1", "5"): "INN", ("J1", "6"): "-15V",
     # bias
     ("R1", "1"): "+15V", ("R1", "2"): "vref",
     ("Q9", "1"): "vref", ("Q9", "2"): "veb", ("Q9", "3"): "vref",
@@ -253,6 +254,7 @@ NET = {
     # test points
     ("TP1", "1"): "+15V", ("TP2", "1"): "-15V", ("TP3", "1"): "GND",
     ("TP4", "1"): "vcn", ("TP5", "1"): "vcd", ("TP6", "1"): "OUTA", ("TP7", "1"): "OUT",
+    ("TP8", "1"): "GND",          # scope ground beside the OUT probe pad
 }
 
 POWER_NETS = {"+15V": ("power:+15V", 0), "-15V": ("power:-15V", 180),
@@ -506,7 +508,7 @@ def _build():
     port("OUT", 266, 72)
 
     # ======================= lower band: test points ===================
-    for ref in ("TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7"):
+    for ref in ("TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7", "TP8"):
         x, y = _GRID[ref]
         net = NET[(ref, "1")]
         wire((ref, "1"), (x, y + 4))
@@ -701,7 +703,7 @@ for c in COMPONENTS:
         m, maker, lcsc = MPN[val]
         SIM_FIELDS.setdefault(ref, []).extend(
             [("MPN", m), ("Manufacturer", maker), ("LCSC", lcsc)])
-NO_SIM = {"J1", "TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7"}   # no SPICE model
+NO_SIM = {"J1", "TP1", "TP2", "TP3", "TP4", "TP5", "TP6", "TP7", "TP8"}   # no SPICE model
 
 
 # ---- blocks, titles and notes ----------------------------------------------
@@ -735,7 +737,7 @@ NOTES = [
     "9. Place C8/C9 at the Q17/Q18 collectors, C10 at Q12's base, C14 at Q15's base,",
     "    C5 at Q17's base, C4 at Q3's base, C13 at Q13's emitter; C11/C12 10u 25 V.",
     "10. R21-R23 33R base stoppers sit right at the Q11/Q14/Q16 base pads.",
-    "11. J1 pinout: 1 INP, 2 GND, 3 INN, 4 OUT, 5 +15V, 6 -15V (GND guards INP).",
+    "11. J1 pinout: 1 +15V, 2 INP, 3 GND, 4 OUT, 5 INN, 6 -15V (GND between INP and OUT).",
 ]
 
 # small italic annotations naming sub-circuits: (text, grid x, grid y)

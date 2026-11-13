@@ -48,30 +48,31 @@ POWER = {"+15V", "-15V", "GND"}
 RAIL_W = 15.0              # per mm a rail pad sits outside its own In2.Cu pour
 THERM_W = 2.0              # thermal-gradient weight across matched pairs
 
-# In2.Cu: +15 V on the top half, -15 V on the bottom half, split along y = 20
-# with a 1.5 mm gap.  J1 (screw terminal, locked) has its +15 V pin 5 at
-# y = 24.5, in the bottom half, so the +15 V pour keeps a short tab under J1's
-# pin row (x < FINGER_X, y < FINGER_Y) that ends between pins 5 and 6; the
-# -15 V pour stays 0.5 mm clear of it.  J1's pins are plated through, so pin 5
-# lands in the tab directly.  C1/C11 sit in the upper half, over the main
-# +15 V plane.
+# In2.Cu: +15 V on the top half, -15 V on the bottom half, a GND corridor
+# between them (below).  J1 is pinned to match: pin 1 (+15 V) lands in the
+# +15 V pour, pin 6 (-15 V) in the -15 V pour, pin 4 (OUT) on the corridor.
+# C1/C11 sit in the upper half, over the main +15 V plane.
 
 # J1: 6-way 3.5 mm screw terminal on the left edge, wire entries facing out,
 # pin 1 at the top.  (board-local centre of pin 1, rotation)
 J1_PLACE = (5.9, 10.5, 270)         # pin-1 arrow silk stays on the board
 UPPER = {"C1", "C11"}
 EDGE_PARTS = {"J1"}            # edge connector: its courtyard may meet the edge          # must sit wholly in the upper (+15 V) half
-TARGET = {"C1": (11.0, 9.0), "C11": (11.0, 12.0),
+TARGET = {
           # power test points near the board edge, easy to probe
-          "TP1": (44.0, 14.0), "TP2": (44.0, 32.0), "TP3": (30.0, 35.0)}
-SPLIT_TOP, SPLIT_BOT = H / 2 - 0.75, H / 2 + 0.75
+          "TP1": (45.5, 5.0), "TP2": (44.0, 32.0), "TP3": (30.0, 35.0)}
+# In2.Cu GND corridor between the rail pours, lined up with J1 pin 4 (OUT,
+# y = 21.1).  OUTA and OUT run from the output stage to R24 / J1 on B.Cu
+# straight along it, so they have a GND reference the whole way and stay
+# under In1's solid GND, never beside an F.Cu high-impedance node.
+CORR_TOP, CORR_BOT = 19.5, 22.5
+SPLIT_TOP, SPLIT_BOT = CORR_TOP - 0.5, CORR_BOT + 0.5   # rail pour edges
+CORR_Y = 21.0              # B.Cu track centre line for OUT / OUTA
 # In2.Cu also carries a GND frame FRAME mm wide round the board edge: OUT runs
 # on B.Cu along the edge, and B.Cu's nearest plane is In2, so the frame gives
 # OUT a GND reference instead of the rail pours.  The perimeter stitching vias
 # tie the frame to In1 and B.Cu.  The rail pours sit inside it.
 FRAME = 2.5
-FINGER_X, FINGER_Y = 8.5, 26.25        # tab ends between J1 pins 5 and 6;
-                                       # wide enough to pass J1 pin 4's antipad
 CORNER_R = 2.0             # board corner radius, mm
 
 # Footprints that exist only on the board (not in the schematic).
@@ -87,7 +88,7 @@ HOLES = {"H1", "H2"}
 BOARD_ID = "DISCRETE OP AMP REV E"
 
 HIGH_Z = {"c2", "d1", "d2", "d3", "a1", "n1", "n2", "vcp", "e3", "e4", "x8",
-          "x9", "xo", "db", "b9", "n8", "n9", "e1", "Tc", "vet", "veb", "vref", "T",
+          "x9", "xo", "db", "b9", "n8", "n9", "e1", "Tc", "vet", "veb", "T",
           "c2b", "d2b", "d3b"}
 
 # Ratsnest-crossing classes.  On a single signal layer every crossing is a
@@ -96,7 +97,7 @@ HIGH_Z = {"c2", "d1", "d2", "d3", "a1", "n1", "n2", "vcp", "e3", "e4", "x8",
 # round the board edge through the reserved strip, not along its ratsnest.
 NO_CROSS = {"e1", "d1", "d2", "c2", "c2b", "d2b", "d3b"}
 DC_BIAS = {"vcd", "vcn", "vcp"}
-EDGE_ROUTED = {"OUT"}
+EDGE_ROUTED = {"OUT", "OUTA"}   # B.Cu, along the In2 GND corridor
 
 
 def cross_factor(net):
@@ -121,6 +122,8 @@ HEAT = {"R19": 156, "Q10": 75, "Q3": 67, "Q7": 62, "R1": 55, "R18": 51,
 def net_weight(net):
     if net in POWER:
         return 0.0
+    if net in EDGE_ROUTED:
+        return 0.5           # B.Cu along the corridor: length is cheap
     if net == "d2":
         return 6.0           # stage-2 output into Q14's base: keep it short
     if net in HIGH_Z:
@@ -131,52 +134,55 @@ def net_weight(net):
 
 
 # Hand floorplan used as the starting point (board-local mm, centre, rotation).
-# Stage 1 is a ring (tail, Q1, Q3, Q5, Q4, mirror, Q6, Q7, Q2) drawn on its side:
-# Q2's chain along the top, Q1's along the bottom, the mirror at the far end.
-# Both inputs then reach their bases from J1 without crossing the ring.
-# Stage 2 sits above it, the output stage takes the right edge (NPN half on the
-# +15 V side, PNP half on the -15 V side), and R17/R7 sit bottom-right so the
-# long OUT run back to J1 pin 1 follows the bottom and left edges, past the
-# tail and bias parts instead of the high-impedance nodes.
+# Signal flow runs left to right along the top and comes back down the middle:
+#   * stage 1 (Q1/Q2 pair, Q3 cascode, Q4-Q8 mirror) beside J1's input pins,
+#     the tail / bias reference (Q9, Q10) below it on the -15 V side;
+#   * stage 2 along the top: Q11 follower -> Q13 CE (R19 load above it) ->
+#     R22 -> Q14 follower, all within a few mm so the high-impedance d1/d2
+#     nodes stay short.  Q13 faces its pins: base and the Miller cap C7 on
+#     the upper left, collector up/right to R19 and R22, emitter down/right to
+#     C13, R20 and the 220 uF C6, so e1 never has to cross d1 or d2;
+#   * output stage as one column straddling the In2 GND corridor: Q17/Q16
+#     (NPN half, +15 V side) above, Q19 (Vbe multiplier) between and touching
+#     both output devices so the bias tracks their temperature, Q18 (PNP,
+#     -15 V side) below, R15/R16 meeting at OUTA beside them, R17 right there;
+#   * OUT and OUTA go back to J1 / R24 on B.Cu along the corridor.
 PLAN = {
-    # stage 1, top chain (Q2 side)
-    "Q2": (13.0, 16.0, 0), "Q7": (17.5, 14.5, 180), "Q6": (22.0, 14.5, 180),
-    "R8": (26.5, 14.5, 180),
-    # stage 1, bottom chain (Q1 side)
-    "Q1": (13.0, 19.0, 0), "Q3": (17.5, 24.5, 180), "Q5": (22.0, 24.5, 180),
-    "Q4": (26.5, 24.5, 180), "R5": (30.5, 24.5, 180),
-    # stage 1, inside the ring: cascode-bias helper
-    "Q8": (18.5, 19.5, 0), "R6": (23.0, 19.5, 0),
-    # tail and bias reference below the ring
-    "R18": (12.5, 29.0, 90), "Q10": (13.0, 33.0, 90), "R3": (13.0, 37.0, 90),
-    "R1": (18.0, 29.0, 90), "Q9": (18.0, 33.0, 90), "R2": (18.0, 37.0, 90),
-    # vcn divider beside the tail
-    "R4": (23.0, 30.0, 90), "R9": (23.0, 34.5, 90), "C4": (26.0, 32.0, 90),
-    # rail decoupling right under the J1 rail pins
-    # +15 V caps in the upper half beside J1, over the main +15 V plane
-    "C11": (11.0, 12.0, 0), "C1": (11.0, 9.0, 0),
-    "C2": (8.0, 31.25, 90), "C12": (9.5, 34.75, 0),
+    # stage 1
+    "Q2": (12.5, 16.0, 0), "Q1": (12.5, 18.75, 0),
+    "R24": (12.75, 21.75, 180), "R25": (12.75, 24.5, 0),
+    "Q7": (18.25, 14.5, 90), "Q8": (17.5, 18.5, 270), "Q6": (27.0, 19.5, 180),
+    "R8": (28.0, 15.0, 270),
+    "Q3": (17.5, 24.25, 180), "Q5": (22.25, 24.0, 90), "Q4": (27.25, 24.0, 180),
+    "R5": (30.75, 17.5, 270), "R6": (22.5, 28.75, 0),
+    "C4": (19.5, 28.5, 270), "R4": (33.0, 17.0, 90), "R9": (25.25, 31.75, 0),
+    # tail current source and its reference
+    "R18": (11.75, 28.0, 270), "Q10": (12.5, 32.5, 90), "Q9": (17.0, 32.5, 90),
+    "R1": (24.5, 16.75, 90), "R2": (18.75, 36.25, 0), "R3": (14.25, 36.25, 0),
+    "C2": (4.75, 32.25, 180), "C12": (8.5, 33.75, 270),
     # stage 2 along the top
-    "Q12": (13.0, 4.0, 90), "Q11": (13.0, 8.5, 90), "C7": (17.0, 6.0, 90),
-    "Q13": (20.5, 8.5, 90), "R19": (20.5, 3.5, 0), "R20": (23.5, 11.0, 90),
-    "C6": (27.5, 6.5, 90), "C10": (9.5, 5.0, 90),
-    # vcd divider between stage 2 and the output
-    "R10": (32.5, 15.5, 90), "R11": (32.5, 23.5, 90), "C5": (40.5, 3.0, 0),
-    # output stage: buffer column, Vbe multiplier, push-pull column
-    "Q15": (36.5, 4.0, 90), "Q14": (36.5, 8.5, 90), "R12": (36.5, 13.0, 90),
-    "R13": (36.5, 17.5, 90), "Q19": (40.0, 15.0, 0), "C3": (40.0, 10.5, 90),
-    "R14": (36.5, 24.0, 90),
-    "Q17": (45.0, 4.0, 90), "Q16": (45.0, 8.5, 90), "R15": (45.0, 12.5, 90),
-    "R16": (45.0, 16.5, 90), "Q18": (45.0, 23.0, 270),
-    "C8": (48.0, 8.0, 90), "C9": (48.0, 26.0, 90),
-    # base stoppers, extra bypass, test points
-    "R21": (11.0, 8.5, 0), "R22": (33.0, 8.5, 0), "R23": (41.0, 8.5, 0),
-    "C13": (24.0, 13.0, 90), "C14": (36.5, 1.5, 0),
-    "R24": (11.0, 22.0, 0), "R25": (11.0, 25.0, 0),
-    "TP1": (44.0, 15.0, 0), "TP2": (44.0, 30.0, 0), "TP3": (30.0, 34.0, 0),
-    "TP4": (26.0, 30.0, 0), "TP5": (34.0, 16.0, 0), "TP6": (46.0, 20.0, 0),
-    "TP7": (38.0, 34.0, 0),
-    "R17": (40.75, 31.0, 270), "R7": (40.75, 35.25, 270),
+    "C6": (30.0, 14.25, 0),
+    "Q12": (13.5, 11.0, 180), "Q11": (17.25, 11.0, 180), "R21": (20.5, 13.25, 180),
+    "C10": (16.5, 9.75, 0), "C1": (25.5, 1.75, 0), "C11": (9.25, 4.25, 90),
+    "C7": (20.25, 7.75, 270), "Q13": (23.0, 9.5, 90), "R19": (23.5, 4.5, 270),
+    "C13": (24.75, 12.75, 270), "R20": (27.0, 11.0, 90),
+    "R22": (26.25, 9.0, 0), "Q14": (29.5, 8.5, 90), "Q15": (31.0, 4.0, 0),
+    "C14": (28.0, 2.25, 180),
+    # vcd divider (DC, bypassed at every cascode base)
+    "R10": (34.25, 10.0, 90), "R11": (33.25, 29.5, 90), "TP5": (30.0, 29.5, 0),
+    # output stage column on the corridor
+    "R23": (34.0, 14.75, 0),
+    "Q17": (39.5, 11.5, 0), "C8": (42.5, 11.5, 0), "C5": (36.5, 8.5, 0),
+    "Q16": (38.0, 15.75, 90),
+    "R12": (34.5, 18.5, 90), "R13": (34.5, 22.75, 90), "C3": (34.5, 26.0, 90),
+    "Q19": (38.0, 20.75, 0),
+    "Q18": (38.0, 25.75, 180), "C9": (36.0, 29.25, 270), "R14": (40.5, 29.5, 0),
+    "R15": (41.75, 17.75, 270), "R16": (41.75, 23.75, 90),
+    "R17": (44.5, 21.0, 270), "R7": (47.0, 24.5, 90),
+    # test points
+    "TP1": (45.5, 6.0, 0), "TP2": (44.5, 31.0, 0), "TP3": (30.0, 35.0, 0),
+    "TP4": (28.5, 28.5, 0), "TP6": (45.0, 16.5, 0), "TP7": (47.0, 20.5, 0),
+    "TP8": (47.0, 24.0, 0),
     # board-only: mounting holes on the diagonal, fiducials on three corners
     "H1": (3.6, 3.6, 0), "H2": (46.4, 36.4, 0),
     "FID1": (47.5, 2.5, 0), "FID2": (11.0, 35.5, 0), "FID3": (30.0, 36.0, 0),
@@ -188,7 +194,8 @@ FID_TARGET = {"FID1": (47.5, 2.5), "FID2": (11.0, 36.0), "FID3": (34.0, 36.0)}
 # leaves the output stage and runs back to J1 pin 1 along the board edges; C6
 # (the 220 uF can) fills the dead corner above J1 instead of sitting in the
 # stage-2 -> output path.
-FIXED = {"R17", "R7", "H1", "H2"}
+FIXED = {"H1", "H2", "C6", "C11"}   # hand-placed: the 220 uF can below-right of Q13 (its emitter
+# side, so e1 never crosses d1/d2), the +15 V bulk cap at J1 pin 1
 
 # Courtyard-free strips (x0, y0, x1, y1).  None now: OUT returns to J1 pin 1
 # on B.Cu (J1 is plated-through), shielded from the F.Cu high-Z nodes by the
@@ -199,27 +206,76 @@ KEEPOUT = []
 # Q1/Q2 may nearly touch (PAIR_GAP) so their emitters can share one T pad.
 # Q5/Q7 are cascodes: their Vbe mismatch barely moves the mirror current, so
 # they are only kept loosely together.  Q4/Q6 set the mirror ratio (offset).
-PAIRS = [("Q1", "Q2", 2.75, 12.0), ("Q4", "Q6", 4.5, 15.0),
+PAIRS = [("Q1", "Q2", 2.75, 20.0), ("Q4", "Q6", 3.25, 20.0),
          ("Q5", "Q7", 6.0, 2.0), ("Q9", "Q10", 5.0, 3.0)]
 PAIR_GAP = 0.3
+# Base stoppers may sit closer to their neighbours than GAP: a stopper only
+# works right on its base, and KiCad itself only forbids courtyard overlap.
+TIGHT = {"R21", "R22", "R23"}
+TIGHT_GAP = 0.25
 THERMAL_PAIRS = [("Q1", "Q2"), ("Q4", "Q6")]
 # (part, pad, anchor part, anchor pad, weight): decoupling and bypass placement
-ATTRACT = [("C2", "1", "J1", "6", 1.0),
+ATTRACT = [("C2", "1", "J1", "6", 1.0), ("C11", "1", "J1", "1", 1.0),
            ("C12", "1", "J1", "6", 1.0),
-           ("C8", "1", "Q17", "3", 2.0), ("C9", "1", "Q18", "3", 2.0),
-           ("C10", "1", "Q12", "1", 2.0), ("C5", "1", "Q17", "1", 1.5),
+           ("C8", "1", "Q17", "3", 4.0), ("C9", "1", "Q18", "3", 8.0),
+           ("C10", "1", "Q12", "1", 8.0), ("C5", "1", "Q17", "1", 4.0),
            ("C4", "1", "Q3", "1", 2.0), ("C6", "1", "Q13", "2", 3.0),
-           ("C3", "1", "Q19", "3", 1.0),
+           ("C3", "1", "Q19", "3", 6.0), ("C3", "2", "Q19", "2", 3.0),
+           # the Vbe multiplier is one tight cell: its divider on Q19's base,
+           # R14 (b9 pull-down) at Q18's base
+           ("R12", "2", "Q19", "1", 3.0), ("R13", "1", "Q19", "1", 3.0),
+           ("R14", "1", "Q18", "1", 3.0),
            # base stoppers belong on the base pad they protect
            ("R21", "2", "Q11", "1", 6.0), ("R22", "2", "Q14", "1", 6.0),
            ("R23", "2", "Q16", "1", 6.0),
            # second bypasses: ceramic at Q13's emitter, local cap at Q15's base
-           ("C13", "1", "Q13", "2", 12.0), ("C14", "1", "Q15", "1", 3.0),
+           ("C13", "1", "Q13", "2", 12.0), ("C14", "1", "Q15", "1", 4.0),
            # feedback network at the inverting input (Q1's base): the long
            # run is OUTA (low impedance), not the INN node
            ("R24", "2", "Q1", "1", 4.0), ("R25", "1", "Q1", "1", 4.0),
            # Miller cap straight across Q13's base and collector
-           ("C7", "2", "Q13", "1", 2.0), ("C7", "1", "Q13", "3", 2.0)]
+           ("C7", "2", "Q13", "1", 2.0), ("C7", "1", "Q13", "3", 2.0),
+           # local decoupling of the cascode collectors that carry signal
+           # current: C1 at Q12 (C8 / C9 at the output devices are above)
+           ("C1", "1", "Q12", "3", 1.5),
+           # Vbe multiplier touching both output devices (bias tracks their
+           # temperature); emitter resistors on their emitters
+           ("Q19", "2", "Q18", "1", 4.0), ("Q19", "3", "Q16", "1", 4.0),
+           ("R15", "1", "Q16", "2", 3.0), ("R16", "2", "Q18", "2", 3.0),
+           # isolation resistor, load and test points at the OUTA node
+           ("R17", "1", "R15", "2", 2.0), ("R17", "1", "R16", "1", 2.0),
+           ("TP6", "1", "R17", "1", 1.0), ("TP7", "1", "R17", "2", 1.0),
+           ("R7", "1", "R17", "2", 1.0), ("TP8", "1", "TP7", "1", 2.0),
+           # mirror emitter resistors on their emitters (both sides alike)
+           ("R5", "2", "Q4", "2", 4.0), ("R8", "2", "Q6", "2", 4.0),
+           # the follower sits by the node it buffers; the vcd divider together
+           ("Q11", "1", "Q7", "3", 2.0), ("R10", "2", "R11", "1", 2.0),
+           # tail resistor on the pair's emitters
+           ("R18", "1", "Q1", "2", 1.0),
+           # bias dividers stay over their own circuit: R1 just above the
+           # corridor over Q9 (short +15 V via, short vref), R4 likewise over Q3
+           ("R1", "2", "Q9", "3", 3.0), ("R4", "2", "Q3", "1", 6.0),
+           ("R9", "1", "Q3", "1", 2.0), ("TP4", "1", "C4", "1", 1.0)]
+
+
+# After the anneal: parts placed at the legal spot nearest their anchor pads
+# (Placer.snug).  The Vbe multiplier's speed-up cap belongs across Q19, and the
+# output-stage rail caps on their transistors' supply pins.
+SNUG = [# base stoppers right on the base they protect (their job is undone
+        # by any trace between them and the base); lightly pulled towards
+        # the node they come from, so they line up without crossing it
+        ("R21", [("2", "Q11", "1", 3.0), ("1", "Q7", "3", 1.0)], 6.0),
+        # bypass caps on the pins they bypass
+        ("C13", [("1", "Q13", "2")], 6.0), ("C10", [("1", "Q12", "1")], 6.0),
+        ("C14", [("1", "Q15", "1")], 6.0), ("C5", [("1", "Q17", "1")], 6.0),
+        ("C3", [("1", "Q19", "3"), ("2", "Q19", "2")]),
+        ("C8", [("1", "Q17", "3")]), ("C9", [("1", "Q18", "3")]),
+        # scope ground beside the OUT probe pad
+        ("TP8", [("1", "TP7", "1")], 8.0)]
+
+# --polish: hand moves applied to the current placement before SNUG.
+#  * Q4 turns to 270 so its emitter faces R5 (e3 was 15 mm round Q6).
+POLISH_HAND = {"Q4": (27.25, 24.75, 270)}
 
 
 def _rect_dist(x, y, r):
@@ -231,12 +287,9 @@ def _rect_dist(x, y, r):
 def rail_miss(net, x, y, m=0.4):
     """How far (mm) a rail pad at (x, y) is from its own In2.Cu pour."""
     if net == "+15V":
-        # the tab under J1 is not counted: it serves J1 pin 5 only, and J1's
-        # pin row walls it off from every other part
         rects = [(FRAME + 0.5 + m, FRAME + 0.5 + m, W - FRAME - 0.5 - m, SPLIT_TOP - m)]
     else:
-        rects = [(FINGER_X + 0.5 + m, SPLIT_BOT + m, W - FRAME - 0.5 - m, H - FRAME - 0.5 - m),
-                 (FRAME + 0.5 + m, FINGER_Y + 0.5 + m, W - FRAME - 0.5 - m, H - FRAME - 0.5 - m)]
+        rects = [(FRAME + 0.5 + m, SPLIT_BOT + m, W - FRAME - 0.5 - m, H - FRAME - 0.5 - m)]
     return min(_rect_dist(x, y, r) for r in rects)
 
 
@@ -299,9 +352,9 @@ class Placer(object):
                           if n in ("+15V", "-15V") and r not in self.locked]
         self.cross_w = 0.0
         self.edges = {}
-        self.pair_set = {(a, b) for a, b, _d, _w in PAIRS} | \
-            {(b, a) for a, b, _d, _w in PAIRS if (a, b) == ("Q1", "Q2")}
-        self.pair_set = {p for p in self.pair_set if set(p) == {"Q1", "Q2"}}
+        # matched pairs may sit PAIR_GAP apart (closer = better matched)
+        self.pair_set = {p for a, b, _d, _w in PAIRS for p in ((a, b), (b, a))
+                         if {a, b} in ({"Q1", "Q2"}, {"Q4", "Q6"})}
         self.nets_of = {}
         for net, pins in self.nets.items():
             for ref, _ in pins:
@@ -417,6 +470,8 @@ class Placer(object):
                 continue
             a0, b0, a1, b1 = self.cbox(other)
             g = PAIR_GAP if (ref, other) in self.pair_set else GAP
+            if ref in TIGHT or other in TIGHT:
+                g = min(g, TIGHT_GAP)
             ox = min(x1, a1) - max(x0, a0) + g
             oy = min(y1, b1) - max(y0, b0) + g
             if ox > 0 and oy > 0:
@@ -541,6 +596,69 @@ class Placer(object):
         finally:
             GAP = keep
 
+    def nocross(self, nets):
+        """Crossings involving `nets` where either net is a no-cross net."""
+        for n in nets:
+            self.edges[n] = self.mst(n)
+        k = 0
+        for n in nets:
+            for m, other in self.edges.items():
+                if m == n or (m in nets and m < n) or not ({n, m} & NO_CROSS) \
+                        or {n, m} & EDGE_ROUTED:
+                    continue
+                k += sum(1 for e in self.edges[n] for f in other if _cross(e, f))
+        return k
+
+    def snug(self, ref, links, radius=7.0):
+        """Put `ref` at the legal spot (any rotation) nearest its anchor pads:
+        minimise the summed pad-to-pad distance of `links` [(pad, anchor ref,
+        anchor pad)].  For parts the anneal cannot thread through a crowd."""
+        global GAP
+        keep, GAP = GAP, GAP_MIN
+        try:
+            links = [l_ if len(l_) == 4 else l_ + (1.0,) for l_ in links]
+            ax = [self.pad(a, ap) for _p, a, ap, _w in links]
+            cx = sum(x for x, _y in ax) / len(ax)
+            cy = sum(y for _x, y in ax) / len(ax)
+            best = None
+            saved = (self.pos[ref], self.rot[ref])
+            self.edges = {n: self.mst(n) for n in self.nets}
+            mynets = sorted(self.nets_of.get(ref, ()))
+            base_x = self.nocross(mynets)
+            n = int(radius / GRID)
+            for rot in (0, 90, 180, 270):
+                self.rot[ref] = rot
+                for i in range(-n, n + 1):
+                    for j in range(-n, n + 1):
+                        self.pos[ref] = (self.snap(cx + i * GRID), self.snap(cy + j * GRID))
+                        d = sum(w_ * math.hypot(self.pad(ref, p)[0] - self.pad(a, ap)[0],
+                                                self.pad(ref, p)[1] - self.pad(a, ap)[1])
+                                for p, a, ap, w_ in links)
+                        if best is not None and d >= best[0]:
+                            continue
+                        if self.part_violation(ref) > 1e-9:
+                            continue
+                        # a rail pad must leave room for its via inside
+                        # its own In2.Cu pour
+                        if any(rail_miss(sch.NET[(ref, p)], *self.pad(ref, p), m=0.9) > 0
+                               for p in self.geo[ref].pads[0]
+                               if sch.NET.get((ref, p)) in ("+15V", "-15V")):
+                            continue
+                        # never trade a shorter link for a new crossing on
+                        # a no-cross net
+                        if self.nocross(mynets) > base_x:
+                            continue
+                        best = (d, self.pos[ref], rot)
+            if best is None:
+                self.pos[ref], self.rot[ref] = saved
+                self.edges = {n: self.mst(n) for n in self.nets}
+                return None
+            self.pos[ref], self.rot[ref] = best[1], best[2]
+            self.edges = {n: self.mst(n) for n in self.nets}
+            return best[0]
+        finally:
+            GAP = keep
+
     def legalize_local(self, rounds=400, seed=0):
         """Clear small residual overlaps left by the anneal: move only parts
         that are still in violation, in small steps, accepting a move when it
@@ -616,18 +734,18 @@ def resize_outline_and_pours(board, x0, y0):
         board.Add(sh)
 
     m = 0.3
-    gx = FINGER_X + 0.5                       # -15 V keeps 0.5 mm off the finger
     f = FRAME + 0.5                           # rails keep 0.5 mm off the GND frame
     shapes = {
         ("GND", "In1.Cu"): [(m, m), (W - m, m), (W - m, H - m), (m, H - m)],
         ("GND", "B.Cu"): [(m, m), (W - m, m), (W - m, H - m), (m, H - m)],
-        ("+15V", "In2.Cu"): [(f, f), (W - f, f), (W - f, SPLIT_TOP),
-                             (FINGER_X, SPLIT_TOP), (FINGER_X, FINGER_Y), (f, FINGER_Y)],
-        ("-15V", "In2.Cu"): [(gx, SPLIT_BOT), (W - f, SPLIT_BOT), (W - f, H - f),
-                             (f, H - f), (f, FINGER_Y + 0.5), (gx, FINGER_Y + 0.5)],
+        ("+15V", "In2.Cu"): [(f, f), (W - f, f), (W - f, SPLIT_TOP), (f, SPLIT_TOP)],
+        ("-15V", "In2.Cu"): [(f, SPLIT_BOT), (W - f, SPLIT_BOT), (W - f, H - f), (f, H - f)],
     }
     frame_outer = [(m, m), (W - m, m), (W - m, H - m), (m, H - m)]
-    frame_hole = [(FRAME, FRAME), (W - FRAME, FRAME), (W - FRAME, H - FRAME), (FRAME, H - FRAME)]
+    # two holes: the GND frame plus the corridor band across the middle
+    frame_holes = [[(FRAME, FRAME), (W - FRAME, FRAME), (W - FRAME, CORR_TOP), (FRAME, CORR_TOP)],
+                   [(FRAME, CORR_BOT), (W - FRAME, CORR_BOT), (W - FRAME, H - FRAME),
+                    (FRAME, H - FRAME)]]
     have_frame = False
     for z in board.Zones():
         if z.GetIsRuleArea():
@@ -651,9 +769,10 @@ def resize_outline_and_pours(board, x0, y0):
     fpoly.NewOutline()
     for (x, y) in frame_outer:
         fpoly.Append(P(x, y).x, P(x, y).y)
-    hole = fpoly.NewHole()
-    for (x, y) in frame_hole:
-        fpoly.Append(P(x, y).x, P(x, y).y, 0, hole)
+    for frame_hole in frame_holes:
+        hole = fpoly.NewHole()
+        for (x, y) in frame_hole:
+            fpoly.Append(P(x, y).x, P(x, y).y, 0, hole)
     frame.UnFill()
     rects = shapes
     done = set()
@@ -758,6 +877,33 @@ def strip_stale_footprints(path):
             stripped.append(ref)
         i = e + 1
     return "".join(out), stripped
+
+
+def strip_routing(src):
+    """Board text without tracks, arcs or vias (a new placement invalidates
+    them).  Text-level for the same SWIG reason as strip_stale_footprints."""
+    out, i, n = [], 0, 0
+    heads = ("\n\t(segment", "\n\t(via", "\n\t(arc")
+    while True:
+        ks = [k for k in (src.find(h, i) for h in heads) if k >= 0]
+        if not ks:
+            out.append(src[i:])
+            break
+        k = min(ks)
+        depth, e = 0, k + 1
+        while True:
+            c = src[e]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            e += 1
+        out.append(src[i:k])
+        n += 1
+        i = e + 1
+    return "".join(out), n
 
 
 def _load_fp(lib, name):
@@ -1011,6 +1157,13 @@ def report(pl, label):
     print("\n== %s ==" % label)
     print("wire cost %.1f   overlap/edge violation %.3f   ratsnest crossings %d"
           % (pl.wire_cost(), pl.total_violation(), pl.crossing_count()))
+    pl.cross_w, keep = 1.0, pl.cross_w
+    pl.edges = {n: pl.mst(n) for n in pl.nets}
+    bad = sorted({"%s x %s" % (n, m) for n in pl.nets for m in pl.nets
+                  if n < m and {n, m} & NO_CROSS and not {n, m} & EDGE_ROUTED
+                  and any(_cross(e, f) for e in pl.edges[n] for f in pl.edges[m])})
+    pl.cross_w = keep
+    print("crossings on no-cross nets: %s" % (", ".join(bad) or "none"))
     print("widest signal nets (half-perimeter, mm):")
     for net, hp, n in pl.spans()[:10]:
         tag = "  high-Z" if net in HIGH_Z else ""
@@ -1023,14 +1176,28 @@ def main():
     ap.add_argument("--iters", type=int, default=250000)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", default=BOARD, help="write here instead of opamp.kicad_pcb")
+    ap.add_argument("--polish", action="store_true",
+                    help="keep the current placement; apply POLISH_HAND and SNUG only")
+    ap.add_argument("--force", action="store_true",
+                    help="write the result even if it is not legal (for inspection)")
     ap.add_argument("--free", action="store_true",
                     help="ignore the hand floorplan and anneal from scratch")
     ap.add_argument("--cross", type=float, default=4.0,
                     help="cost per ratsnest crossing (doubled for high-Z nets)")
     a = ap.parse_args()
 
+    # SaveBoard rewrites opamp.kicad_pro from the loaded board's settings, and
+    # a board loaded via a temp copy loses the net-class patterns: keep the
+    # project file as it was and put it back after saving
+    pro_path = os.path.join(ROOT, "opamp.kicad_pro")
+    pro_text = open(pro_path).read()
     src, stripped = strip_stale_footprints(BOARD)
-    if stripped and not a.dry_run:
+    unrouted = 0
+    if not a.dry_run:
+        src, unrouted = strip_routing(src)
+        if unrouted:
+            print("removed %d tracks / vias (placement changes; re-route after)" % unrouted)
+    if (stripped or unrouted) and not a.dry_run:
         tmp = os.path.join(ROOT, ".place_tmp_%d.kicad_pcb" % os.getpid())
         open(tmp, "w").write(src)
         # the project file must sit beside it, or pcbnew loads default rules
@@ -1040,7 +1207,8 @@ def main():
         board = pcbnew.LoadBoard(tmp)
         os.remove(tmp)
         os.remove(tmp[:-10] + ".kicad_pro")
-        print("replacing stale footprints: %s" % stripped)
+        if stripped:
+            print("replacing stale footprints: %s" % stripped)
     else:
         board = pcbnew.LoadBoard(BOARD)
     if not a.dry_run:
@@ -1059,7 +1227,13 @@ def main():
         x0, y0, x1, y1 = pl.cbox(r)
         if x0 < EDGE or y0 < EDGE or x1 > W - EDGE or y1 > H - EDGE:
             raise SystemExit("locked part %s would sit outside the new outline" % r)
-    if a.free:
+    if a.polish:
+        pl.movable = [r for r in pl.movable if r not in FIXED]
+        for r, (x, y, rot) in POLISH_HAND.items():
+            pl.pos[r] = (pl.snap(x), pl.snap(y))
+            pl.rot[r] = rot
+        viol = 0.0
+    elif a.free:
         for r in pl.movable:
             x, y = pl.pos[r]
             pl.pos[r] = (pl.snap(min(max(x, 3), W - 3)), pl.snap(min(max(y, 3), H - 3)))
@@ -1081,8 +1255,26 @@ def main():
         if viol > 1e-9:
             pl.legalize_local(seed=a.seed)
             viol = pl.legal_violation()
+    for ref, links, *rad in SNUG:
+        d = pl.snug(ref, links, *rad)
+        print("snug %s: %s" % (ref, "no legal spot" if d is None else "%.1f mm to its anchors" % d))
+        if os.environ.get("SNUG_DEBUG"):
+            pl.cross_w, keep_w = 1.0, pl.cross_w
+            pl.edges = {n: pl.mst(n) for n in pl.nets}
+            print("   no-cross after: %s" % sorted({"%s x %s" % (n, m) for n in pl.nets for m in pl.nets
+                  if n < m and {n, m} & NO_CROSS and not {n, m} & EDGE_ROUTED
+                  and any(_cross(e, f) for e in pl.edges[n] for f in pl.edges[m])}))
+            pl.cross_w = keep_w
+    viol = pl.legal_violation()
     report(pl, "after (50 x 40 mm)")
     if viol > 1e-9:
+        global GAP
+        keep, GAP = GAP, GAP_MIN
+        print("still in violation: %s" % ", ".join(
+            "%s %.2f" % (r, pl.part_violation(r)) for r in sorted(pl.fp)
+            if pl.part_violation(r) > 1e-9))
+        GAP = keep
+    if viol > 1e-9 and not a.force:
         raise SystemExit("placement not legal (violation %.3f) - try another --seed" % viol)
     pl.movable = sorted(set(pl.fp) - pl.locked)
     pl.apply()
@@ -1091,7 +1283,9 @@ def main():
     board_id(board, pl.x0, pl.y0)
     # pours are left unfilled: with no vias yet every fill is "isolated
     # copper"; KiCad refills them (B) once the board is routed
-    if not pcbnew.SaveBoard(a.out, board):
+    ok = pcbnew.SaveBoard(a.out, board)
+    open(pro_path, "w").write(pro_text)
+    if not ok:
         raise SystemExit("save failed")
     print("\nwrote %s" % a.out)
 

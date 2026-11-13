@@ -29,16 +29,21 @@ Known-good state:
 ## 2. PCB layout
 
 The board is complete: placed, routed, KiCad DRC 0 violations / 0 unconnected
-under the project's net-class rules, after two review + adversarial-review
-passes on the placement and two on the routed board.
+under the project's net-class rules. Re-floorplanned and re-routed after a
+further review: signal-flow placement, J1 re-pinned to the board, OUT/OUTA
+on a GND corridor, rip-up/reroute + tidy passes (no stepped traces), then an
+independent adversarial review whose fixes are applied (open items below).
 
 Pipeline (the board is edited in place; `gen_pcb.py` must not be re-run):
 `place.py` syncs parts and pad nets from `gen_sch_rf.NET`, shapes the outline
-and pours and places the parts; `route.py` routes; `set_rules.py` /
-`set_stackup.py` write rules and stack-up; `verify_board.py` gates. All run
-from `./check.sh` except `place.py` / `route.py` (deliberate steps:
-`python3 place.py --seed 27 && python3 route.py`). Do not use KiCad's "Update
-PCB from Schematic" (schematic auto net names differ from the board's).
+and pours, strips old routing and places the parts; `route.py` routes (OUT/OUTA
+corridor, signals, rail fanouts, rip-up/reroute, tidy, stitching, R19 copper);
+`set_rules.py` / `set_stackup.py` write rules and stack-up; `verify_board.py`
+gates. All run from `./check.sh` except `place.py` / `route.py` (deliberate
+steps: `python3 place.py --seed 34 --iters 1000000 --cross 8 && python3
+place.py --polish && python3 route.py`). Do not use KiCad's "Update PCB from Schematic" (schematic auto net
+names differ from the board's). `freeroute.py` is an optional Freerouting
+round trip; it was tried and gave worse results (see its docstring).
 
 **Done**
 - [x] **2.1 Stack-up** (`set_stackup.py`). 4 copper, 1.606 mm: F.Cu 1 oz
@@ -55,31 +60,46 @@ PCB from Schematic" (schematic auto net names differ from the board's).
       (gate), including the six pads re-netted by the J1 re-pin and stoppers.
 - [x] **2.6 Design rules.** Default 0.2/0.2, Analog (high-Z) 0.2/0.25, Power
       0.25/0.5 with 0.8/0.4 vias; min annular ring 0.15 mm (0.6/0.3 via).
-- [x] **2.7 Placement** (`place.py --seed 27`). Stage 1 is a ring on its side
-      so INP/INN reach their bases without crossings; stage 2 above; output
-      stage on the right edge. Q1/Q2 2.8 mm apart, mirror Q4/Q6 4.5 mm with
-      heat sources placed symmetrically; base stoppers 2.3–3.4 mm from their
-      bases; C13 2.7 mm from Q13's emitter; R24 (feedback) 3.7 mm from Q1's
-      base. Courtyards aim for 1.0 mm apart (≥ 0.8 mm accepted).
-- [x] **2.7a In2.Cu.** +15 V top half, −15 V bottom half, inside a 2.5 mm GND
-      frame round the edge (the reference plane for OUT on B.Cu), plus a
-      +15 V tab under J1 (x < 8.5 mm, y < 26.25 mm) so J1 pin 5 plugs straight
-      in. Rails have zone priority over the frame.
-- [x] **2.7b Decoupling.** C8/C9 at the Q17/Q18 collectors (7.5 / 2.8 mm),
-      C10 at Q12's base, C14 at Q15's base, C5 at Q17's base, C4 at Q3's base
-      (all ≤ 3.6 mm), C13 + C6 at Q13's emitter, C1/C11 (+15 V) in the upper
-      half by J1, C2/C12 (−15 V) by J1. Each cap has its own via to its plane.
-- [x] **2.8 Routing** (`route.py`): F.Cu at 0/45/90°, 577 segments, 113 vias,
-      no crossings on the stage-2 signal / AC-ground nets. Routed lengths:
-      c2 8.0, c2b 3.0, d1 9.2, d2 16.1, e1 10.5, d3 14.2, INP 7.2, INN 11.7
-      (incl. R24/R25), OUTA 51 mm (low impedance; ≥ 2.5 mm from c2/d1/d2).
-- [x] **2.9 OUT** runs on B.Cu, within 2.5 mm of the edge, over the In2 GND
-      frame, from R17/R7 to J1 pin 4. Shielded from F.Cu by In1.
+- [x] **2.7 Placement** (`place.py --seed 34 --iters 1000000 --cross 8`,
+      then `place.py --polish`). Signal flow left to right along the top and
+      back down the middle: stage 1 beside J1's input pins, tail / bias below
+      it; stage 2 along the top with Q13 facing its pins (base + Miller C7
+      upper left, collector to R19 / R22, emitter to C13 / R20 / C6), so the
+      no-cross nets (c2, c2b, d1, d2, e1, d2b, d3b) have no ratsnest
+      crossings; output stage one column across the In2 GND corridor (Q17/Q16,
+      C3 + Q19, Q18), R15/R16/R17 at OUTA. Q1/Q2 3.5 mm (centres, rot 90),
+      mirror Q4/Q6 4.2 mm; R24 3.5 mm from Q1. `--polish` keeps the placement
+      and seats parts by rule (`SNUG`): stoppers R21/R23 on their bases,
+      C10/C14/C5/C13/C8/C9/C3 on their pins, TP8 by TP7 — never accepting a
+      spot that adds a no-cross crossing. Courtyards ≥ 0.8 mm apart (0.25 mm
+      for the base stoppers and 0.3 mm inside the matched pairs).
+- [x] **2.7a In2.Cu.** +15 V top, −15 V bottom, a 3 mm GND corridor between
+      them (y 19.5–22.5 mm, in line with J1 pin 4) and a 2.5 mm GND frame round
+      the edge. J1 is pinned to match (1 +15V, 2 INP, 3 GND, 4 OUT, 5 INN,
+      6 −15V): each rail pin lands in its own pour, no tab.
+- [x] **2.7b Decoupling.** Cascode-base caps C10/C14/C5, C13 at Q13's emitter,
+      C8/C9 at the Q17/Q18 collectors, C3 across Q19 — each placed by `SNUG`
+      at the nearest legal spot (3.8–4.5 mm centre to centre). C1 at Q14/Q15,
+      C11 (bulk) at J1 pin 1, C2/C12 at J1 pin 6. Each cap has its own via.
+- [x] **2.8 Routing** (`route.py`): 350 segments, 132 vias, KiCad DRC 0 / 0.
+      Grid A* router, then a rip-up/reroute pass (each net alone against the
+      finished board, kept if shorter) and a tidy pass (every chain redrawn
+      with the fewest 0/45/90° segments that clear the other nets: 622 → 350
+      segments, no staircases). No vias and no B.Cu on c2, c2b, d1, d2, d2b,
+      d3b, INP, INN. Routed lengths (mm): c2 5.3, c2b 1.5, d1 9.7, d2 8.8,
+      d2b 7.5, d3b 12.9, e1 13.8, e3 6.0, e4 2.4, vcp 13.0, INP 5.5, INN 9.8.
+      Rail fanout stubs ≤ 2.4 mm except R4 (2.15).
+- [x] **2.9 OUT / OUTA** run on B.Cu straight along the In2 GND corridor: OUT
+      (0.5 mm, y 20.65) to J1 pin 4, OUTA (0.3 mm, y 21.6) to R24. Shielded
+      from F.Cu by In1; the corridor is stitched to In1 / B.Cu by a row of GND
+      vias along each edge (13 vias, 3.5 mm pitch where they fit).
 - [x] **2.10 Thermal copper.** R19's +15 V pad has an F.Cu copper area tied by
       its via to In2.
-- [x] **2.11 Ground.** In1 solid; B.Cu pour one piece; GND stitching vias
-      round the perimeter every 3 mm.
-- [x] **2.13 Test points.** TP1–TP7: +15V, −15V, GND, vcn, vcd, OUTA, OUT.
+- [x] **2.11 Ground.** In1 solid; B.Cu GND pour (split by the OUT/OUTA
+      runs, each half stitched); GND stitching vias round the perimeter every
+      3 mm and along the corridor.
+- [x] **2.13 Test points.** TP1–TP8: +15V, −15V, GND, vcn, vcd, OUTA, OUT,
+      and GND (TP8, beside TP7: scope ground at the output).
       None on c2/d2: a probe pad on a high-impedance node adds capacitance.
 - [x] **2.14 Silkscreen.** References 1.0 mm / 0.15 mm (0.8 mm / 0.15 mm in
       four crowded spots), each placed beside its own part where possible.
@@ -89,12 +109,23 @@ PCB from Schematic" (schematic auto net names differ from the board's).
   input bias current here is ~21 µA, so board leakage is irrelevant.
 
 **Open / judgment calls for the bench**
-- [ ] **2.15** R1 and R4 (+15 V ends) sit over the −15 V half and reach the
-      +15 V pour through ~9.5 mm stubs (≈ 2 mA each; harmless, not elegant).
+- [ ] **2.15** R4 (+15 V end of the vcn divider) sits over the −15 V half and
+      reaches the +15 V pour through an 11 mm, 0.5 mm stub that passes the
+      mirror. No legal +15 V spot exists within 14 mm of Q3. Harmless at DC
+      (≈ 1 mA); moving R4 to the +15 V side would carry vcn instead (C4
+      decouples it).
 - [ ] **2.16** No base stoppers on Q1/Q2 (noise vs the 10 Ω R25) or on the
       MMBTH81 output PNP Q18 (600 MHz part). Add if the bench shows GHz
       oscillation.
 - [ ] **2.17** Refill zones (`B`) after any edit and before generating Gerbers.
+- [ ] **2.18** R22 (Q14's base stopper) is 7.6 mm from Q14 (d2b 7.5 mm of
+      trace after the stopper) and R23's d3b is 12.9 mm. R19, C14 and Q15 box
+      Q14's base in; moving Q14 to open a gap cascades into C14 / d3
+      crossings. A local re-floorplan of Q13–Q14–Q15 would fix both.
+- [ ] **2.19** Input-pair thermal symmetry: R1 (55 mW) is 3.8 mm from Q1 and
+      5.7 mm from Q2 (independent review: ≈ 52 vs 47 mW/mm). Small against
+      the circuit's own 19 vs 8 mW pair imbalance (4.7).
+- [ ] **2.20** vcd (DC, bypassed at all three cascode bases) is 64 mm long.
 
 ---
 
@@ -126,7 +157,7 @@ PCB from Schematic" (schematic auto net names differ from the board's).
 | C1–C5, C8–C10, C13, C14 | 100n | 0603 | — | |
 | R21–R23 | 33 | 0603 | — | base stoppers |
 | R24 / R25 | 10k / 10 | 0603 | — | on-board feedback (60 dB) |
-| TP1–TP7 | test pad | Ø1.5 mm SMD | — | |
+| TP1–TP8 | test pad | Ø1.5 mm SMD | — | |
 | J1 | 6-way screw terminal 3.5 mm | THT | — | Phoenix PT 1,5/6-3,5-H or equivalent |
 | C11, C12 | 10 µF, ≥25 V X5R | 1206 | — | rail bulk at J1 |
 | C6 | 220 µF | 6.3×5.4 mm | — | stage-2 bypass |

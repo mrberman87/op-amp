@@ -156,16 +156,21 @@ to happen. The stoppers move the closed-loop response by < 0.1 %.
 | R21, R22, R23 | base stoppers (Q11, Q14, Q16) 33 | 0603 |
 | **R24** | **feedback 10k, OUTA → INN** | 0603 |
 | **R25** | **gain-setting 10, INN → GND** | 0603 |
-| TP1–TP7 | test pads: +15V, −15V, GND, vcn, vcd, OUTA, OUT | Ø1.5 mm SMD |
-| J1 | 6-way screw terminal, 3.5 mm (Phoenix PT 1,5/6-3,5-H 1984662 or equivalent): 1 INP, 2 GND, 3 INN, 4 OUT, 5 +15V, 6 −15V | THT |
+| TP1–TP8 | test pads: +15V, −15V, GND, vcn, vcd, OUTA, OUT, GND (beside OUT) | Ø1.5 mm SMD |
+| J1 | 6-way screw terminal, 3.5 mm (Phoenix PT 1,5/6-3,5-H 1984662 or equivalent): 1 +15V, 2 INP, 3 GND, 4 OUT, 5 INN, 6 −15V | THT |
 
 **The 60 dB gain is set on the board** by R24/R25 (1 + 10k/10 = 1001), taken
 from OUTA — before the 47 Ω R17 — exactly as simulated. R17 therefore stays
 outside the loop and isolates whatever capacitance hangs on OUT: the netlist
 check shows 0.04 dB of peaking with 100 pF on OUT and 0.23 dB with 1 nF. INN
-is still on J1 for trimming or paralleling a different gain. GND (pin 2) and
-INN (pin 3) sit between INP (pin 1) and OUT (pin 4), so the terminal cannot
-couple the output back into the non-inverting input.
+is still on J1 for trimming or paralleling a different gain.
+
+**J1 pin order follows the board.** +15 V (pin 1) lands in the +15 V plane
+(top half), −15 V (pin 6) in the −15 V plane (bottom half), and OUT (pin 4)
+lines up with the In2.Cu GND corridor that carries OUT/OUTA back on B.Cu.
+GND (pin 3) sits between INP (pin 2) and OUT, and doubles as the load
+return beside OUT; INN (pin 5) is next to R24/R25 and is low-impedance
+(10 Ω R25 to GND), so its neighbour OUT cannot couple into it.
 
 ---
 
@@ -202,8 +207,8 @@ resistors are below the 75 % chip-resistor derating. The hottest parts:
 **Known thermal asymmetry in the input pair.** Q2 dissipates ~19 mW
 (Vce 3.5 V) against Q1's ~8 mW (Vce 1.6 V, cascoded by Q3). On a SOT-343 that
 is a few kelvin of junction difference, i.e. several mV of input offset that the
-SPICE models (no self-heating) do not show. The layout keeps Q1/Q2 2.8 mm apart
-with shared emitter copper; the circuit fix is a second cascode on Q2's
+SPICE models (no self-heating) do not show. The layout keeps Q1/Q2 3.5 mm apart
+(centres) with shared emitter copper; the circuit fix is a second cascode on Q2's
 collector (TODO 4.7).
 
 > **PCB note:** the BFP420 is a 4-lead SOT-343 (1=B, 2=E, 3=C, 4=E). The
@@ -221,10 +226,12 @@ collector (TODO 4.7).
 - **Closed-loop 60 dB requires a low-impedance feedback network** (`Rf` in
   the low-kΩ range). A 1 MΩ feedback resistor would put 21 V across it.
 - The schematic and the **PCB are complete, routed and verified**: 4 layers
-  (F.Cu signal+parts / In1.Cu GND / In2.Cu rails inside a GND edge frame /
-  B.Cu GND), 50 × 40 mm with rounded corners, all 66 parts on the top side
-  plus 2 M3 holes and 3 fiducials, 577 track segments and 113 vias, KiCad DRC
-  0 violations / 0 unconnected under the project's net-class rules. Nets come
+  (F.Cu signal+parts / In1.Cu GND / In2.Cu +15 V and −15 V with a GND
+  corridor between them and a GND edge frame / B.Cu GND), 50 × 40 mm with
+  rounded corners, all 67 parts on the top side plus 2 M3 holes and 3
+  fiducials, 350 track segments and 132 vias, KiCad DRC 0 violations /
+  0 unconnected under the project's net-class rules. OUT and OUTA run on
+  B.Cu along the corridor. Nets come
   from the same table that draws the schematic. See TODO §2.
 - **Do not use KiCad's "Update PCB from Schematic".** The board is synced from
   `gen_sch_rf.NET` by `place.py`; the schematic's auto-generated net names
@@ -243,12 +250,15 @@ opamp/
 ├── opamp.kicad_sch          generated schematic, Rev E (A3)
 ├── opamp.kicad_pcb          4-layer board, placed and routed (edited in place)
 ├── place.py                 sync parts/nets from NET, outline, pours, placement
-├── route.py                 router: signals, rail fanouts, stitching, R19 copper
+├── route.py                 router: OUT/OUTA corridor, signals, rail fanouts,
+│                            rip-up/reroute + tidy passes, stitching, R19 copper
+├── freeroute.py             optional Freerouting round trip (DSN prep / SES import)
 ├── set_stackup.py           physical 4-layer stack-up -> board file
 ├── set_rules.py             design rules and net classes -> .kicad_pro
 ├── verify_board.py          board gate (stack, nets, pad 4, pours, keepouts, DRC)
 ├── gen_pcb.py               original board generator (superseded; do not re-run)
 ├── pcb_preview.py           placement PNG
+├── render_board.py          routed-board PNG (tracks, vias, pads; ratsnest if unrouted)
 ├── check.sh                 regenerate + ERC + sims + rules + stack-up + board gate
 ├── sim/
 │   ├── rf_two_stage.py      Rev-E two-stage netlist + closed-loop test
